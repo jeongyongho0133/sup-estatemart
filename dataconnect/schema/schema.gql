@@ -1,0 +1,59 @@
+type User @table {
+  email: String
+  phoneNumber: String
+  displayName: String
+  profileImageUrl: String
+  createdAt: Timestamp!
+}
+
+type Property @table {
+  title: String!
+  address: String!
+  price: Int!
+  area: Int!
+  numberOfRooms: Int!
+  propertyType: String!
+  listingAgent: Agent!
+  createdAt: Timestamp!
+  description: String
+  imageUrls: [String]
+  latitude: Float
+  longitude: Float
+  yearBuilt: Int
+  floor: Int
+  parkingAvailability: Boolean
+  heatingType: String
+  moveInDate: Date
+}
+
+type Agent @table {
+  agencyName: String!
+  agentName: String!
+  phoneNumber: String!
+  createdAt: Timestamp!
+  email: String
+  licenseNumber: String
+  profileImageUrl: String
+  bio: String
+}
+
+type SavedProperty @table {
+  user: User!
+  property: Property!
+  userNotes: String
+  status: String
+  createdAt: Timestamp!
+}
+
+type SearchPreference @table {
+  user: User!
+  region: String!
+  minPrice: Int!
+  maxPrice: Int!
+  minArea: Int!
+  maxArea: Int!
+  propertyType: String!
+  createdAt: Timestamp!
+  keywords: [String]
+  notificationEnabled: Boolean
+}
