@@ -1,0 +1,30 @@
+{
+  "name": "estatemartet",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "bugs": {
+    "url": "https://github.com/jeongyongho0133/sup-estatemart/issues"
+  },
+  "homepage": "https://github.com/jeongyongho0133/sup-estatemart#readme",
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "firebase": "^12.8.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.12.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.3.1"
+  }
+}

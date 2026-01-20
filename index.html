@@ -1,28 +1,17 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
+
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Estate Market</title>
+  <script type="text/javascript"
+    src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_APP_KEY&libraries=services"></script>
 </head>
+
 <body>
-
-  <script src="https://www.gstatic.com/firebasejs/8.6.5/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.6.5/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.6.5/firebase-firestore.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.6.5/firebase-storage.js"></script>
-  
-  <script>
-      var firebaseConfig = {
-        apiKey: "AIzaSyDxeBMcsLOESHig6CrpweDlU7lTjHC",
-        authDomain: "applemarket-83cc9.firebaseapp.com",
-        projectId: "applemarket-83cc9",
-        콘솔에 있던 긴 코드~~~
-      };
-      firebase.initializeApp(firebaseConfig);
-  </script>
-
-  
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
+
 </html>
