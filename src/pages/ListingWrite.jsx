@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
+import { db } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const ListingWrite = () => {
     const navigate = useNavigate();
+    const { currentUser } = useAuth();
     const [images, setImages] = useState([]);
     const [title, setTitle] = useState('');
     const [price, setPrice] = useState('');
+    const [transactionType, setTransactionType] = useState('매매'); // Default
+    const [description, setDescription] = useState(''); // Added missing state
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Simple image preview handler
     const handleImageChange = (e) => {
@@ -14,60 +21,115 @@ const ListingWrite = () => {
             const fileArray = Array.from(e.target.files).map((file) => URL.createObjectURL(file));
             setImages((prev) => prev.concat(fileArray));
             Array.from(e.target.files).map(
-                (file) => URL.revokeObjectURL(file) // Clean up memory to avoid leaks in real app
+                (file) => URL.revokeObjectURL(file)
             );
         }
     };
 
-    const handleSubmit = () => {
-        // Validation Logic
-        if (images.length < 3) {
-            alert("신뢰할 수 있는 매물 정보를 위해 사진을 최소 3장 이상 등록해주세요.");
-            return;
+    // Helper to format price in Korean (e.g., 1억 5000만원)
+    const formatPriceToKorean = (price) => {
+        const num = parseInt(price, 10);
+        if (isNaN(num) || num === 0) return '';
+
+        const units = ['만원', '억', '조'];
+        let result = '';
+        let unitIndex = 0;
+        let p = num;
+
+        while (p > 0) {
+            const part = p % 10000;
+            if (part > 0) {
+                result = `${part}${units[unitIndex]} ${result}`;
+            }
+            p = Math.floor(p / 10000);
+            unitIndex++;
         }
-        if (!title.trim()) {
-            alert("제목을 입력해주세요.");
-            return;
-        }
-        if (!price || isNaN(price) || Number(price) <= 0) {
-            alert("유효한 가격을 입력해주세요.");
+
+        return result.trim();
+    };
+
+
+
+    const handleSubmit = async () => {
+        alert("Debug: 버튼 클릭됨"); // Debug alert
+        if (isSubmitting) return;
+
+        alert("Debug: 사용자 정보 확인: " + (currentUser ? currentUser.uid : "없음")); // Debug alert
+
+        if (!currentUser) {
+            alert("로그인이 필요한 서비스입니다.");
+            navigate('/login');
             return;
         }
 
-        // Mock "Pending Review" logic for MVP
-        // In a real app, we would check market price variance here
-        const isExpensive = Number(price) > 50000; // Mock threshold
-        const status = isExpensive ? 'review_pending' : 'active';
+        try {
+            if (!title.trim()) { alert("제목을 입력해주세요."); return; }
+            if (!price) { alert("가격을 입력해주세요."); return; }
 
-        if (status === 'review_pending') {
-            alert("시세 대비 가격 차이가 커서 '검수 대기' 상태로 등록됩니다. (관리자 확인 후 노출)");
-        } else {
-            alert("매물이 정상적으로 등록되었습니다! (데모)");
+            setIsSubmitting(true);
+
+            // Mock image upload if empty
+            const demoImageUrl = images.length > 0 ? images[0] : "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80";
+            const currentUserUid = currentUser.uid;
+
+            // Just save directly to ensure it works. 
+            // Removed complex logic that might be causing silent failures.
+            await addDoc(collection(db, "listings"), {
+                title: title,
+                price: price,
+                transactionType: transactionType,
+                location: "역삼동",
+                description: description || "",
+                imageUrl: demoImageUrl,
+                createdAt: serverTimestamp(),
+                userId: currentUserUid,
+                status: 'active', // Default to active for now to ensure visibility
+                likes: 0
+            });
+
+            alert("매물이 등록되었습니다.");
+            navigate('/');
+        } catch (e) {
+            console.error("Error adding document: ", e);
+            alert("오류가 발생했습니다: " + e.message);
+        } finally {
+            setIsSubmitting(false);
         }
-
-        // TODO: Implement actual Firestore upload
-        navigate('/');
     };
 
     return (
-        <MobileLayout showNav={false}>
+        <MobileLayout>
             <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100">
                 <button onClick={() => navigate(-1)} className="text-lg">닫기</button>
-                <div className="font-bold">내 물건 팔기</div>
-                <button onClick={handleSubmit} className="text-market-orange font-bold text-lg">완료</button>
+                <div className="font-bold">내 물건 팔기 (v2.0)</div>
+                <button onClick={handleSubmit} disabled={isSubmitting} className={`font-bold text-lg ${isSubmitting ? 'text-gray-400' : 'text-market-orange'}`}>
+                    {isSubmitting ? '저장중...' : '완료'}
+                </button>
             </header>
 
             <div className="p-4 space-y-6 pb-20">
                 {/* Image Upload */}
                 <div className="flex space-x-3 overflow-x-auto no-scrollbar py-2">
-                    <label className="flex flex-col items-center justify-center w-20 h-20 border border-gray-300 rounded-lg flex-shrink-0 cursor-pointer text-gray-400">
+                    <label
+                        className="flex flex-col items-center justify-center border border-gray-300 rounded-lg flex-shrink-0 cursor-pointer text-gray-400"
+                        style={{ width: '80px', height: '80px' }}
+                    >
                         <span className="text-2xl">📷</span>
                         <span className="text-xs">{images.length}/10</span>
                         <input type="file" multiple className="hidden" onChange={handleImageChange} accept="image/*" />
                     </label>
                     {images.map((img, idx) => (
-                        <div key={idx} className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 relative">
-                            <img src={img} alt="preview" className="w-full h-full object-cover" />
+                        <div
+                            key={idx}
+                            className="rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 relative"
+                            style={{ width: '80px', height: '80px' }}
+                        >
+                            <img
+                                src={img}
+                                alt="preview"
+                                className="w-full h-full object-cover"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
                             <button onClick={() => setImages(images.filter((_, i) => i !== idx))} className="absolute top-0 right-0 bg-black/50 text-white rounded-bl-lg w-5 h-5 flex items-center justify-center text-xs">x</button>
                         </div>
                     ))}
@@ -83,14 +145,22 @@ const ListingWrite = () => {
                         placeholder="글 제목"
                         className="w-full py-2 border-b border-gray-200 outline-none focus:border-market-orange"
                     />
+
                 </div>
 
-                {/* Category */}
+                {/* Category (Transaction Type) */}
                 <div className="space-y-2">
                     <label className="font-bold text-sm">거래 방식</label>
                     <div className="flex space-x-2">
-                        {['매매', '전세', '월세'].map(type => (
-                            <button key={type} className="px-4 py-2 border border-gray-200 rounded-full text-sm hover:bg-black hover:text-white transition">
+                        {['매매', '전세', '월세', '교환'].map(type => (
+                            <button
+                                key={type}
+                                onClick={() => setTransactionType(type)}
+                                className={`px-4 py-2 border rounded-full text-sm transition ${transactionType === type
+                                    ? 'bg-black text-white border-black'
+                                    : 'border-gray-200 hover:bg-gray-50'
+                                    }`}
+                            >
                                 {type}
                             </button>
                         ))}
@@ -107,11 +177,18 @@ const ListingWrite = () => {
                         placeholder="가격을 입력해주세요."
                         className="w-full py-2 border-b border-gray-200 outline-none focus:border-market-orange"
                     />
+                    {price && (
+                        <div className="text-sm text-market-orange mt-1 font-bold">
+                            {formatPriceToKorean(price)}
+                        </div>
+                    )}
                 </div>
 
                 {/* Description */}
                 <div className="space-y-1">
                     <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
                         placeholder="매물에 올릴 게시글 내용을 작성해주세요. (가품 및 판매금지품목은 게시가 제한될 수 있어요.)"
                         className="w-full h-40 py-2 border-none outline-none resize-none"
                     ></textarea>

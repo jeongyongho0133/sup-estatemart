@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 import KakaoMap from '../components/common/KakaoMap';
+import { useAuth } from '../contexts/AuthContext';
 
 const ListingDetail = () => {
     const { id } = useParams();
@@ -22,6 +23,31 @@ const ListingDetail = () => {
             name: "스타공인중개사",
             verified: true
         }
+    };
+
+    const { currentUser } = useAuth(); // Add this hook
+
+    const handleLike = () => {
+        if (!currentUser) {
+            if (window.confirm("로그인이 필요한 서비스입니다.\n로그인/회원가입 페이지로 이동하시겠습니까?")) {
+                navigate('/login');
+            }
+            return;
+        }
+        // TODO: Implement actual toggle like logic
+        alert("관심 목록에 추가되었습니다.");
+    };
+
+    const handleChat = () => {
+        if (!currentUser) {
+            if (window.confirm("로그인이 필요한 서비스입니다.\n로그인/회원가입 페이지로 이동하시겠습니까?")) {
+                navigate('/login');
+            }
+            return;
+        }
+        // Navigate to chat
+        // navigate('/chat/...');
+        alert("채팅방으로 이동합니다.");
     };
 
     return (
@@ -98,12 +124,12 @@ const ListingDetail = () => {
             {/* Sticky Bottom Actions */}
             <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white p-4 pb-6 flex items-center justify-center">
                 <div className="w-full max-w-md flex space-x-3">
-                    <button className="p-3 text-gray-400 border border-gray-200 rounded-lg">♡</button>
+                    <button onClick={handleLike} className="p-3 text-gray-400 border border-gray-200 rounded-lg">♡</button>
                     <div className="flex-1">
                         <div className="text-xs font-bold text-gray-900">{listing.price}</div>
                         <div className="text-[10px] text-blue-600 font-bold">가격 절충 불가</div>
                     </div>
-                    <button className="flex-1 bg-market-orange text-white font-bold rounded-lg py-3">
+                    <button onClick={handleChat} className="flex-1 bg-market-orange text-white font-bold rounded-lg py-3">
                         채팅으로 거래하기
                     </button>
                 </div>

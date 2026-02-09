@@ -14,6 +14,9 @@
   },
   "homepage": "https://github.com/jeongyongho0133/sup-estatemart#readme",
   "dependencies": {
+    "@capacitor/android": "^8.0.1",
+    "@capacitor/cli": "^8.0.1",
+    "@capacitor/core": "^8.0.1",
     "@tailwindcss/postcss": "^4.1.18",
     "firebase": "^12.8.0",
     "react": "^19.2.3",
