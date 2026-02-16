@@ -1,11 +1,27 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 
 const Login = () => {
-    const { loginWithGoogle, loginWithFacebook, resetPassword, currentUser } = useAuth();
+    const { login, loginWithGoogle, loginWithFacebook, resetPassword, currentUser } = useAuth();
     const navigate = useNavigate();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleEmailLogin = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        try {
+            await login(email, password);
+            navigate('/');
+        } catch (error) {
+            handleLoginError(error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleGoogleLogin = async () => {
         try {
@@ -71,6 +87,43 @@ const Login = () => {
                 </div>
 
                 <div className="w-full space-y-4">
+                    {/* Email Login Form */}
+                    <form onSubmit={handleEmailLogin} className="space-y-3 mb-6">
+                        <div>
+                            <input
+                                type="email"
+                                placeholder="이메일"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-market-orange focus:ring-1 focus:ring-market-orange outline-none transition"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <input
+                                type="password"
+                                placeholder="비밀번호"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-market-orange focus:ring-1 focus:ring-market-orange outline-none transition"
+                                required
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full py-3.5 rounded-xl bg-market-orange text-white font-bold text-lg hover:bg-orange-600 transition disabled:opacity-50"
+                        >
+                            {isLoading ? '로그인 중...' : '로그인'}
+                        </button>
+                    </form>
+
+                    <div className="relative flex py-2 items-center">
+                        <div className="flex-grow border-t border-gray-200"></div>
+                        <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">또는 SNS 계정으로 로그인</span>
+                        <div className="flex-grow border-t border-gray-200"></div>
+                    </div>
+
                     {/* Google Login */}
                     <button
                         onClick={handleGoogleLogin}

@@ -6,3 +6,4 @@
 git commit을 할때는 git add .을 해야한다.
 git push를 할때는 git push origin main을 해야한다.
 git pull을 할때는 git pull origin main을 해야한다.
+배포 run을 할때는 npm run build; firebase deploy --project capable-country-229822  해야한다.

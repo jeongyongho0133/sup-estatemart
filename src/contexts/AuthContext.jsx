@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup, signOut, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth } from '../firebase';
+import { onAuthStateChanged, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup, signInWithRedirect, signOut, sendPasswordResetEmail, getRedirectResult, signInWithEmailAndPassword } from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -9,19 +8,21 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
-    const [userRole, setUserRole] = useState(null); // 'user', 'agent', 'admin'
+    const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    const login = (email, password) => {
+        return signInWithEmailAndPassword(auth, email, password);
+    };
 
     const loginWithGoogle = async () => {
         const provider = new GoogleAuthProvider();
-        return signInWithPopup(auth, provider);
-        // Note: Google login doesn't automatically create the 'users' doc with role. 
-        // Logic should be added to check/create if missing, defaulting to 'user'.
+        return signInWithRedirect(auth, provider);
     };
 
     const loginWithFacebook = async () => {
         const provider = new FacebookAuthProvider();
-        return signInWithPopup(auth, provider);
+        return signInWithRedirect(auth, provider);
     };
 
     const resetPassword = (email) => {
@@ -32,43 +33,43 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            try {
-                if (user) {
-                    // Fetch Role
+            if (user) {
+                setCurrentUser(user);
+                // Fetch extra data from Firestore
+                try {
+                    const { doc, getDoc } = await import('firebase/firestore');
+                    const { db } = await import('../firebase');
                     const userDoc = await getDoc(doc(db, "users", user.uid));
                     if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        setCurrentUser({ ...user, ...userData }); // Merge role into currentUser
-                        setUserRole(userData.role);
+                        const data = userDoc.data();
+                        if (data.isBanned) {
+                            alert(`이 계정은 활동이 정지되었습니다.\n사유: ${data.banReason || '사유 없음'}`);
+                            await signOut(auth);
+                            setUserData(null);
+                            setCurrentUser(null);
+                        } else {
+                            setUserData(data);
+                        }
                     } else {
-                        // Fallback for old users or Google users without doc
-                        setCurrentUser(user);
-                        setUserRole('user');
+                        setUserData({ role: 'user' });
                     }
-                } else {
-                    setCurrentUser(null);
-                    setUserRole(null);
+                } catch (e) {
+                    console.error("Error fetching user data:", e);
+                    setUserData({ role: 'user' });
                 }
-            } catch (error) {
-                console.error("Auth State Check Error:", error);
-                // Fallback: still log the user in but maybe without role if DB fails
-                // Or handle based on need. For now, try to keep currentUser if available from auth
-                if (user) {
-                    setCurrentUser(user);
-                    // default role
-                    setUserRole('user');
-                } else {
-                    setCurrentUser(null);
-                }
-            } finally {
-                setLoading(false);
+            } else {
+                setCurrentUser(null);
+                setUserData(null);
             }
+            setLoading(false);
         });
         return unsubscribe;
     }, []);
 
     const value = {
         currentUser,
+        userData,
+        login,
         loginWithGoogle,
         loginWithFacebook,
         resetPassword,
