@@ -10,10 +10,15 @@ service cloud.firestore {
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']));
     }
     
-    // Users: only the user themselves can read/write their own data
-    // Users: only the user themselves can read/write their own data, including subcollections (e.g. likes)
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Users: anyone can read the basic user profile, but only the user can write.
+    // Subcollections (e.g. likes) are restricted to the user themselves.
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // Chats: only participants can read/write

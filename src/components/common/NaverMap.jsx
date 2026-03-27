@@ -1,32 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const KakaoMap = ({ lat, lng, listings = [], onMarkerClick }) => {
+const NaverMap = ({ lat, lng, listings = [], onMarkerClick }) => {
     const mapContainer = useRef(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const [error, setError] = useState(false);
 
     useEffect(() => {
-        // Check if Kakao SDK is available
-        const checkKakao = () => {
-            if (window.kakao && window.kakao.maps) {
+        const checkNaver = () => {
+            if (window.naver && window.naver.maps) {
                 setIsLoaded(true);
             } else {
-                // If script is loaded but not initialized, or invalid key
-                // For this demo, we might fail if key is invalid. 
-                // We'll trust the global script load.
-                if (document.querySelector('script[src*="dapi.kakao.com"]')) {
-                    // Script exists, wait a bit? 
-                    // Actually, if key is invalid, kakao.maps might not be defined.
+                if (document.querySelector('script[src*="openapi/v3/maps.js"]')) {
                     setTimeout(() => {
-                        if (window.kakao && window.kakao.maps) setIsLoaded(true);
+                        if (window.naver && window.naver.maps) setIsLoaded(true);
                         else setError(true);
-                    }, 1000)
+                    }, 1000);
                 } else {
                     setError(true);
                 }
             }
         };
-        checkKakao();
+        checkNaver();
     }, []);
 
     useEffect(() => {
@@ -43,38 +37,40 @@ const KakaoMap = ({ lat, lng, listings = [], onMarkerClick }) => {
                     }
                 }
 
-                const options = {
-                    center: new window.kakao.maps.LatLng(initLat, initLng),
-                    level: listings.length > 0 ? 6 : 3
+                const center = new window.naver.maps.LatLng(initLat, initLng);
+                const mapOptions = {
+                    center: center,
+                    zoom: listings.length > 0 ? 13 : 15
                 };
-                const map = new window.kakao.maps.Map(mapContainer.current, options);
+
+                const map = new window.naver.maps.Map(mapContainer.current, mapOptions);
 
                 if (listings.length > 0) {
                     listings.forEach(listing => {
                         if (listing.coordinates?.lat && listing.coordinates?.lng) {
-                            const pos = new window.kakao.maps.LatLng(listing.coordinates.lat, listing.coordinates.lng);
-                            const marker = new window.kakao.maps.Marker({
+                            const pos = new window.naver.maps.LatLng(listing.coordinates.lat, listing.coordinates.lng);
+                            const marker = new window.naver.maps.Marker({
                                 position: pos,
+                                map: map,
                                 title: listing.title
                             });
-                            marker.setMap(map);
 
                             if (onMarkerClick) {
-                                window.kakao.maps.event.addListener(marker, 'click', () => {
+                                window.naver.maps.Event.addListener(marker, 'click', () => {
                                     onMarkerClick(listing);
                                 });
                             }
                         }
                     });
                 } else if (lat && lng) {
-                    const markerPosition = new window.kakao.maps.LatLng(lat, lng);
-                    const marker = new window.kakao.maps.Marker({
-                        position: markerPosition
+                    const pos = new window.naver.maps.LatLng(lat, lng);
+                    new window.naver.maps.Marker({
+                        position: pos,
+                        map: map
                     });
-                    marker.setMap(map);
                 }
             } catch (e) {
-                console.error("Map initialization failed", e);
+                console.error("Naver Map initialization failed", e);
                 setError(true);
             }
         }
@@ -83,9 +79,10 @@ const KakaoMap = ({ lat, lng, listings = [], onMarkerClick }) => {
     if (error) {
         return (
             <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center">
-                <span className="text-2xl mb-2">🗺️</span>
-                <p>지도를 불러올 수 없습니다.</p>
-                <p className="text-xs mt-1 text-gray-400">올바른 카카오 앱 키가 필요합니다.</p>
+                <span className="text-2xl mb-2">🇳</span>
+                <p>네이버 지도를 불러올 수 없습니다.</p>
+                <p className="text-[10px] mt-1 text-gray-400">index.html에 올바른 ncpClientId가 포함된 스크립트가 필요합니다.</p>
+                <code className="text-[8px] mt-2 bg-gray-200 p-1 rounded font-mono break-all">&lt;script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=발급받은키"&gt;&lt;/script&gt;</code>
             </div>
         );
     }
@@ -93,4 +90,4 @@ const KakaoMap = ({ lat, lng, listings = [], onMarkerClick }) => {
     return <div ref={mapContainer} className="w-full h-full bg-gray-100" />;
 };
 
-export default KakaoMap;
+export default NaverMap;

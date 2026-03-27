@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import MobileLayout from '../components/layout/MobileLayout';
 import ListingCard from '../components/ListingCard';
+import KakaoMap from '../components/common/KakaoMap';
+import NaverMap from '../components/common/NaverMap';
+import GoogleMap from '../components/common/GoogleMap';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, where, limit, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -38,6 +41,8 @@ const Home = () => {
     const [showOthersModal, setShowOthersModal] = useState(false);
     const [selectedParentId, setSelectedParentId] = useState(null);
     const [isCategoryExpanded, setIsCategoryExpanded] = useState(false);
+    const [viewMode, setViewMode] = useState('list');
+    const [mapProvider, setMapProvider] = useState('kakao');
 
     useEffect(() => {
         // Fetch Listings
@@ -139,7 +144,7 @@ const Home = () => {
     };
 
     const filteredListings = listings.filter(item => {
-        if (item.status === 'hidden') return false;
+        if (item.status === 'hidden' || item.status === 'sold') return false;
 
         const locMatch = currentLocation === '전체' ? true : (item.location ? item.location.includes(currentLocation) : true);
         const searchMatch = searchQuery
@@ -388,18 +393,64 @@ const Home = () => {
             {/* Listing Feed Header */}
             <div className="px-4 py-4 flex justify-between items-center">
                 <h2 className="font-bold text-lg">우리 동네 인기 매물</h2>
-                <button className="text-xs text-gray-400">더보기 &gt;</button>
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                    <button 
+                        onClick={() => setViewMode('list')}
+                        className={`text-xs px-3 py-1.5 font-bold rounded-md transition ${viewMode === 'list' ? 'bg-white shadow text-market-orange' : 'text-gray-500'}`}
+                    >
+                         목록
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('map')}
+                        className={`text-xs px-3 py-1.5 font-bold rounded-md transition ${viewMode === 'map' ? 'bg-white shadow text-market-orange' : 'text-gray-500'}`}
+                    >
+                         지도
+                    </button>
+                </div>
             </div>
 
-            {/* Listing Feed */}
+            {/* Listing Feed / Map */}
             <div className="min-h-screen pb-4 bg-gray-50">
-                {filteredListings.length > 0 ? (
-                    filteredListings.map(listing => (
-                        <ListingCard key={listing.id} listing={listing} />
-                    ))
+                {viewMode === 'list' ? (
+                    filteredListings.length > 0 ? (
+                        filteredListings.map(listing => (
+                            <ListingCard key={listing.id} listing={listing} />
+                        ))
+                    ) : (
+                        <div className="py-20 text-center text-gray-500 text-sm">
+                            {searchQuery ? "검색 결과가 없습니다." : "이 지역의 매물이 없습니다."}
+                        </div>
+                    )
                 ) : (
-                    <div className="py-20 text-center text-gray-500 text-sm">
-                        {searchQuery ? "검색 결과가 없습니다." : "이 지역의 매물이 없습니다."}
+                    <div className="w-full flex-1 flex flex-col">
+                        <div className="bg-white px-4 py-2 border-b flex justify-between items-center z-10">
+                            <span className="text-xs font-bold text-gray-600">지도 서비스 선택</span>
+                            <div className="flex space-x-2">
+                                <button 
+                                    onClick={() => setMapProvider('kakao')}
+                                    className={`text-[10px] px-3 py-1.5 rounded-full border transition ${mapProvider === 'kakao' ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                                >
+                                    카카오맵
+                                </button>
+                                <button 
+                                    onClick={() => setMapProvider('naver')}
+                                    className={`text-[10px] px-3 py-1.5 rounded-full border transition ${mapProvider === 'naver' ? 'bg-green-500 text-white border-green-500 font-bold shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                                >
+                                    네이버지도
+                                </button>
+                                <button 
+                                    onClick={() => setMapProvider('google')}
+                                    className={`text-[10px] px-3 py-1.5 rounded-full border transition ${mapProvider === 'google' ? 'bg-blue-500 text-white border-blue-500 font-bold shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                                >
+                                    구글지도
+                                </button>
+                            </div>
+                        </div>
+                        <div className="w-full h-[600px] relative">
+                            {mapProvider === 'kakao' && <KakaoMap listings={filteredListings} onMarkerClick={(listing) => navigate(`/listing/${listing.id}`)} />}
+                            {mapProvider === 'naver' && <NaverMap listings={filteredListings} onMarkerClick={(listing) => navigate(`/listing/${listing.id}`)} />}
+                            {mapProvider === 'google' && <GoogleMap listings={filteredListings} onMarkerClick={(listing) => navigate(`/listing/${listing.id}`)} />}
+                        </div>
                     </div>
                 )}
             </div>

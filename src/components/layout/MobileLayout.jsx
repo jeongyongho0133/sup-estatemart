@@ -1,5 +1,6 @@
 import React from 'react';
 import BottomNav from './BottomNav';
+import AiChat from '../common/AiChat';
 
 const MobileLayout = ({ children, showNav = true }) => {
     return (
@@ -8,6 +9,7 @@ const MobileLayout = ({ children, showNav = true }) => {
                 <main className={`pb-20 ${showNav ? '' : 'pb-0'}`}>
                     {children}
                 </main>
+                <AiChat />
                 {showNav && <BottomNav />}
             </div>
         </div>

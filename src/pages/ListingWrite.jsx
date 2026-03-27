@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
 import { db, storage } from '../firebase';
-import { collection, doc, setDoc, serverTimestamp, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, serverTimestamp, getDocs, query, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import KakaoMap from '../components/common/KakaoMap';
 
 const SAMPLE_IMAGES = [
@@ -58,6 +59,8 @@ const ListingWrite = () => {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [categories, setCategories] = useState([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [forbiddenKeywords, setForbiddenKeywords] = useState([]);
 
     // Safety Valve: Force reset submit state if it hangs for more than 40 seconds
     useEffect(() => {
@@ -93,7 +96,20 @@ const ListingWrite = () => {
                 console.error("Error fetching categories", error);
             }
         };
+
+        const fetchSystemSettings = async () => {
+            try {
+                const settingsSnap = await getDoc(doc(db, "settings", "system"));
+                if (settingsSnap.exists() && settingsSnap.data().forbiddenKeywords) {
+                    setForbiddenKeywords(settingsSnap.data().forbiddenKeywords);
+                }
+            } catch (error) {
+                console.error("Error fetching system settings", error);
+            }
+        };
+
         fetchCategories();
+        fetchSystemSettings();
     }, []);
 
     // Image handler
@@ -207,6 +223,43 @@ const ListingWrite = () => {
 
     // ... (rest of states)
 
+    // AI Description Generator
+    const handleGenerateDescription = async () => {
+        if (aiLoading) return;
+
+        // Basic Validation
+        if (!sido || !sigungu) {
+            alert("위치 정보를 먼저 입력해주세요.");
+            return;
+        }
+
+        try {
+            setAiLoading(true);
+            const functions = getFunctions();
+            const generateDescription = httpsCallable(functions, 'generateDescription');
+
+            const listingData = {
+                location: `${sido} ${sigungu} ${eupmyeondong} ${detailAddress}`.trim(),
+                price: transactionType === '월세' ? `보증금 ${deposit}/월세 ${monthlyRent}` : `${price}만원`,
+                area: `전용 ${exclusiveArea}㎡ / 공급 ${supplyArea}㎡`,
+                features: [], // TODO: Add specific features checkboxes later
+                type: propertyType,
+                dealType: transactionType
+            };
+
+            const result = await generateDescription(listingData);
+
+            if (result.data && result.data.response) {
+                setDescription(prev => prev + (prev ? "\n\n" : "") + result.data.response);
+            }
+        } catch (error) {
+            console.error("AI Generation Error:", error);
+            alert("AI 설명 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     // ... (helper functions)
 
     const handleSubmit = async () => {
@@ -219,6 +272,17 @@ const ListingWrite = () => {
 
         try {
             if (!title.trim()) { alert("제목을 입력해주세요."); return; }
+
+            // Check Forbidden Keywords
+            if (forbiddenKeywords.length > 0) {
+                const combinedText = (title + " " + description).toLowerCase();
+                const foundKeyword = forbiddenKeywords.find(k => combinedText.includes(k.toLowerCase()));
+                if (foundKeyword) {
+                    alert(`금지된 키워드가 포함되어 있습니다: "${foundKeyword}"\n제목이나 내용을 수정해주세요.`);
+                    return;
+                }
+            }
+
             if (transactionType !== '월세' && !price) { alert("가격을 입력해주세요."); return; }
             if (transactionType === '월세' && (!deposit || !monthlyRent)) { alert("보증금과 월세를 입력해주세요."); return; }
 
@@ -437,7 +501,17 @@ const ListingWrite = () => {
                 </div>
 
                 <div className="space-y-1">
-                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="설명 작성" className="w-full h-40 py-2 border-none outline-none resize-none text-sm"></textarea>
+                    <div className="flex justify-between items-end mb-2">
+                        <label className="font-bold text-sm">상세 설명</label>
+                        <button
+                            onClick={handleGenerateDescription}
+                            disabled={aiLoading}
+                            className={`text-xs px-3 py-1.5 rounded-full flex items-center space-x-1 transition ${aiLoading ? 'bg-gray-100 text-gray-400' : 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md hover:shadow-lg'}`}
+                        >
+                            <span>{aiLoading ? '생성중...' : '✨ AI 설명 자동 생성'}</span>
+                        </button>
+                    </div>
+                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="매물에 대한 자세한 설명을 작성해주세요. AI 버튼을 누르면 자동으로 생성됩니다." className="w-full h-60 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
                 </div>
             </div>
         </MobileLayout>

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, getDoc, serverTimestamp, increment } from 'firebase/firestore';
+import AgentReviews from '../components/reviews/AgentReviews';
 
 const Profile = () => {
     const { currentUser, userData, logout } = useAuth();
@@ -26,13 +27,18 @@ const Profile = () => {
             try {
                 const q = query(
                     collection(db, "listings"),
-                    where("userId", "==", currentUser.uid),
-                    orderBy("createdAt", "desc")
+                    where("userId", "==", currentUser.uid)
                 );
                 const querySnapshot = await getDocs(q);
-                const items = [];
+                let items = [];
                 querySnapshot.forEach((doc) => {
                     items.push({ id: doc.id, ...doc.data() });
+                });
+                // Sort client-side to avoid composite index requirement
+                items.sort((a, b) => {
+                    const timeA = a.createdAt?.seconds || 0;
+                    const timeB = b.createdAt?.seconds || 0;
+                    return timeB - timeA;
                 });
                 setMyListings(items);
             } catch (error) {
@@ -117,7 +123,10 @@ const Profile = () => {
     };
 
     const handleStatusChange = async (id, currentStatus) => {
-        const newStatus = currentStatus === 'active' ? 'reserved' : 'active';
+        let newStatus = 'active';
+        if (currentStatus === 'active') newStatus = 'reserved';
+        else if (currentStatus === 'reserved') newStatus = 'active';
+        else if (currentStatus === 'sold') newStatus = 'active';
         try {
             await updateDoc(doc(db, "listings", id), { status: newStatus });
             setMyListings(prev => prev.map(item => item.id === id ? { ...item, status: newStatus } : item));
@@ -352,6 +361,14 @@ const Profile = () => {
                     </div>
                 )}
 
+                {/* Agent Reviews (My Reputation) */}
+                {(role === 'broker' || role === 'agent') && (
+                    <div className="mb-6 p-4 bg-white border border-gray-100 rounded-xl shadow-sm">
+                        <h4 className="font-bold text-sm mb-4">내 평판 (고객 후기)</h4>
+                        <AgentReviews agentId={currentUser.uid} />
+                    </div>
+                )}
+
                 {/* Management Sections */}
                 <div className="space-y-4 mb-6">
                     <div className="flex items-center space-x-2 px-1 mb-2">
@@ -392,13 +409,13 @@ const Profile = () => {
 
             {/* My Listings Section */}
             <div className="p-4 mb-20">
-                <h3 className="font-bold text-lg mb-4">내 등록 매물 ({myListings.length})</h3>
+                <h3 className="font-bold text-lg mb-4">내 판매중 매물 ({myListings.filter(l => l.status !== 'sold').length})</h3>
 
                 {loading && myListings.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">로딩중...</div>
-                ) : myListings.length === 0 ? (
+                ) : myListings.filter(l => l.status !== 'sold').length === 0 ? (
                     <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-lg">
-                        등록된 매물이 없습니다.<br />
+                        현재 등록된 내용이 없습니다.<br />
                         <button
                             onClick={() => navigate('/write')}
                             className="mt-3 text-market-orange font-bold underline"
@@ -408,7 +425,7 @@ const Profile = () => {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {myListings.map(item => (
+                        {myListings.filter(l => l.status !== 'sold').map(item => (
                             <div key={item.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                                 <div className="flex p-3">
                                     <div
@@ -439,8 +456,9 @@ const Profile = () => {
                                             </p>
                                             <div className="font-bold text-market-orange mt-1">
                                                 {item.transactionType === '월세'
-                                                    ? `${item.deposit}/${item.monthlyRent}`
-                                                    : item.price}
+                                                    ? `보증금 ${item.deposit}/월세 ${item.monthlyRent}`
+                                                    : `${item.price}만원`
+                                                }
                                             </div>
                                         </div>
                                     </div>
@@ -454,7 +472,7 @@ const Profile = () => {
                                         {item.status === 'active' ? '예약중 설정' : '판매중 설정'}
                                     </button>
                                     <button
-                                        onClick={() => alert("수정 기능은 곧 업데이트 예정입니다!")}
+                                        onClick={() => navigate(`/edit/${item.id}`)}
                                         className="flex-1 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50"
                                     >
                                         수정
@@ -468,6 +486,66 @@ const Profile = () => {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                )}
+
+                {/* Sold Listings Section */}
+                {myListings.filter(l => l.status === 'sold').length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-gray-100">
+                        <h3 className="font-bold text-lg mb-4 text-gray-600">거래 완료 매물 ({myListings.filter(l => l.status === 'sold').length})</h3>
+                        <div className="space-y-4 opacity-75 hover:opacity-100 transition">
+                            {myListings.filter(l => l.status === 'sold').map(item => (
+                                <div key={item.id} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                                    <div className="flex p-3">
+                                        <div
+                                            onClick={() => navigate(`/listing/${item.id}`)}
+                                            className="w-24 h-24 bg-gray-200 rounded flex-shrink-0 relative overflow-hidden cursor-pointer"
+                                        >
+                                            <img
+                                                src={item.imageUrl || "https://via.placeholder.com/150"}
+                                                alt={item.title}
+                                                className="w-full h-full object-cover grayscale"
+                                            />
+                                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                                <span className="text-white text-xs font-bold border border-white px-2 py-1 rounded">거래완료</span>
+                                            </div>
+                                        </div>
+                                        <div className="ml-3 flex-1 flex flex-col justify-between">
+                                            <div onClick={() => navigate(`/listing/${item.id}`)} className="cursor-pointer">
+                                                <h4 className="font-medium text-sm line-clamp-2 text-gray-500 line-through">{item.title}</h4>
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    {item.location} · {item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : '날짜 없음'}
+                                                </p>
+                                                <div className="font-bold text-gray-400 mt-1">
+                                                    {item.transactionType === '월세'
+                                                        ? `보증금 ${item.deposit}/월세 ${item.monthlyRent}`
+                                                        : `${item.price}만원`
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex border-t divide-x border-gray-200">
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm("거래 완료 상태를 해제하고 다시 '판매중'으로 변경하시겠습니까? (이전에 받은 리뷰 등에는 영향이 없습니다.)")) {
+                                                    handleStatusChange(item.id, 'sold');
+                                                }
+                                            }}
+                                            className="flex-1 py-3 text-sm font-bold text-gray-600 hover:bg-gray-100"
+                                        >
+                                            거래 완료 해제 (판매중)
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(item.id)}
+                                            className="w-20 py-3 text-xs font-medium text-red-400 hover:bg-red-50"
+                                        >
+                                            삭제
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>

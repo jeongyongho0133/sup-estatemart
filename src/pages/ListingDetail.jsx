@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 import KakaoMap from '../components/common/KakaoMap';
+import ReviewWrite from '../components/reviews/ReviewWrite';
+import AgentReviews from '../components/reviews/AgentReviews';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, addDoc, getDocs, increment, updateDoc } from 'firebase/firestore';
@@ -115,6 +117,9 @@ const ListingDetail = () => {
     const [reportReason, setReportReason] = useState('허위 매물');
     const [reportDetail, setReportDetail] = useState('');
 
+    // Review Modal State
+    const [showReviewModal, setShowReviewModal] = useState(false);
+
     const handleChat = async () => {
         if (!currentUser) {
             if (window.confirm('로그인이 필요한 서비스입니다.\n로그인/회원가입 페이지로 이동하시겠습니까?')) {
@@ -162,6 +167,27 @@ const ListingDetail = () => {
         } catch (error) {
             console.error("Error creating/navigating to chat:", error);
             alert("채팅방 연결에 실패했습니다.");
+        }
+    };
+
+    const handleMarkAsSold = async () => {
+        if (!window.confirm("정말로 이 매물을 '거래 완료' 처리하시겠습니까?\n마이페이지에서 다시 '판매중'으로 복구할 수 있습니다.")) {
+            return;
+        }
+
+        try {
+            const docRef = doc(db, 'listings', id);
+            await updateDoc(docRef, {
+                status: 'sold',
+                soldAt: serverTimestamp()
+            });
+            setListing(prev => ({ ...prev, status: 'sold' }));
+            if (window.confirm("거래 완료 처리되었습니다. 🎉\n마이페이지의 '거래 완료 매물' 목록으로 이동하시겠습니까?")) {
+                navigate('/profile');
+            }
+        } catch (error) {
+            console.error("Error marking as sold:", error);
+            alert("처리 중 오류가 발생했습니다.");
         }
     };
 
@@ -237,6 +263,11 @@ const ListingDetail = () => {
             {/* Image */}
             <div className="h-72 bg-gray-200 w-full relative">
                 <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover" />
+                {listing.status === 'sold' && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+                        <span className="text-white text-3xl font-black border-4 border-white px-8 py-3 rounded-xl transform -rotate-12 shadow-2xl tracking-widest">거래 완료</span>
+                    </div>
+                )}
                 {listing.transactionType && (
                     <span className="absolute bottom-3 left-3 bg-market-orange text-white text-xs font-bold px-2 py-1 rounded">
                         {listing.transactionType}
@@ -380,6 +411,22 @@ const ListingDetail = () => {
                         </div>
                     </div>
                 )}
+
+                {/* Agent Reviews Section */}
+                <div className="mb-6 border-t pt-6">
+                    <div className="flex justify-between items-end mb-4">
+                        <h3 className="font-bold text-lg">중개사 후기</h3>
+                        {currentUser && currentUser.uid !== listing.userId && (
+                            <button
+                                onClick={() => setShowReviewModal(true)}
+                                className="text-xs font-bold text-blue-500 border border-blue-200 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition"
+                            >
+                                후기 작성하기 ✍️
+                            </button>
+                        )}
+                    </div>
+                    <AgentReviews agentId={listing.userId} />
+                </div>
             </div>
 
             {/* Sticky Bottom Actions */}
@@ -395,9 +442,28 @@ const ListingDetail = () => {
                         <div className="text-xs font-bold text-gray-900">{displayPrice()}</div>
                         <div className="text-[10px] text-market-orange font-bold">{listing.transactionType}</div>
                     </div>
-                    <button onClick={handleChat} className="flex-1 bg-market-orange text-white font-bold rounded-lg py-3">
-                        채팅으로 거래하기
-                    </button>
+
+                    {currentUser && currentUser.uid === listing.userId ? (
+                        listing.status === 'sold' ? (
+                            <button disabled className="flex-1 bg-gray-300 text-gray-500 font-bold rounded-lg py-3 cursor-not-allowed text-sm">
+                                이미 거래 완료됨
+                            </button>
+                        ) : (
+                            <button onClick={handleMarkAsSold} className="flex-1 bg-gray-900 text-white font-bold rounded-lg py-3 hover:bg-black transition text-sm">
+                                거래 완료 처리
+                            </button>
+                        )
+                    ) : (
+                        listing.status === 'sold' ? (
+                            <button disabled className="flex-1 bg-gray-300 text-gray-500 font-bold rounded-lg py-3 cursor-not-allowed text-sm">
+                                거래 완료된 매물
+                            </button>
+                        ) : (
+                            <button onClick={handleChat} className="flex-1 bg-market-orange text-white font-bold rounded-lg py-3 hover:bg-orange-600 transition text-sm">
+                                채팅으로 거래하기
+                            </button>
+                        )
+                    )}
                 </div>
             </div>
 
@@ -449,6 +515,21 @@ const ListingDetail = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Review Modal */}
+            {showReviewModal && (
+                <ReviewWrite
+                    agentId={listing.userId}
+                    agentName={listing.brokerInfo?.officeName || seller?.displayName}
+                    listingId={id}
+                    onClose={() => setShowReviewModal(false)}
+                    onSuccess={() => {
+                        setShowReviewModal(false);
+                        // Optional: trigger a refresh of AgentReviews here by passing a refresh trigger or similar if needed. 
+                        // For now, it will refresh on remount, but we could add a simple state toggle to force it.
+                    }}
+                />
             )}
         </MobileLayout>
     );

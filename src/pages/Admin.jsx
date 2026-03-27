@@ -9,6 +9,8 @@ import AnalyticsTab from '../components/admin/AnalyticsTab';
 import NotificationTab from '../components/admin/NotificationTab';
 import SubscriptionTab from '../components/admin/SubscriptionTab';
 import SettingsTab from '../components/admin/SettingsTab';
+import ActivityLogTab from '../components/admin/ActivityLogTab';
+import ReviewMonitorTab from '../components/admin/ReviewMonitorTab';
 import DashboardStats from '../components/admin/DashboardStats';
 import { serverTimestamp } from 'firebase/firestore';
 
@@ -115,6 +117,23 @@ const Admin = () => {
             });
         } catch (error) {
             console.error("Error fetching dashboard data:", error);
+        }
+    };
+
+    const logActivity = async (action, targetId, details) => {
+        try {
+            await addDoc(collection(db, "audit_logs"), {
+                action,
+                targetId,
+                details,
+                adminId: currentUser.uid,
+                adminEmail: currentUser.email,
+                createdAt: serverTimestamp(),
+                ipAddress: 'Unknown', // Ideally captured from a backend or edge function
+                userAgent: navigator.userAgent
+            });
+        } catch (error) {
+            console.error("Failed to log activity:", error);
         }
     };
 
@@ -261,6 +280,8 @@ const Admin = () => {
 
                 setPendingListings(prev => prev.filter(item => item.id !== id));
                 if (listingSubTab === 'all') fetchAllListings();
+
+                await logActivity('approve', id, `Listing Approved: ${listingData.title}`);
                 alert("승인되었습니다.");
             } catch (error) {
                 console.error("Error approving listing:", error);
@@ -285,6 +306,7 @@ const Admin = () => {
     const handleReject = async (id) => {
         if (window.confirm("이 매물을 삭제(거절)하시겠습니까?")) {
             await deleteDoc(doc(db, "listings", id));
+            await logActivity('reject', id, 'Listing Rejected/Deleted');
             setPendingListings(prev => prev.filter(item => item.id !== id));
         }
     };
@@ -295,6 +317,7 @@ const Admin = () => {
                 await updateDoc(doc(db, "listings", listingId), { status: 'hidden' });
                 await updateDoc(doc(db, "reports", reportId), { status: 'processed_hidden' });
                 setReports(prev => prev.filter(r => r.id !== reportId));
+                await logActivity('update', listingId, `Listing Hidden via Report: ${reportId}`);
                 alert("매물이 비공개 처리되었습니다.");
             } catch (error) {
                 console.error("Error hiding listing:", error);
@@ -322,6 +345,7 @@ const Admin = () => {
                     banReason: reason,
                     bannedAt: serverTimestamp()
                 });
+                await logActivity('block', userId, `User Banned: ${reason}`);
                 alert("회원이 성공적으로 차단되었습니다.");
                 if (activeTab === 'users') fetchUsers();
             } catch (error) {
@@ -354,6 +378,7 @@ const Admin = () => {
                 }
 
                 setPendingVerifications(prev => prev.filter(u => u.id !== id));
+                await logActivity('approve', id, 'Agent Verification Approved');
                 alert("인증이 승인되었습니다. 해당 중개사의 모든 매물에 인증 마크가 표시됩니다.");
             } catch (error) {
                 console.error("Error approving verification:", error);
@@ -370,6 +395,7 @@ const Admin = () => {
             verificationStatus: 'rejected',
             rejectionReason: reason
         });
+        await logActivity('reject', id, `Agent Verification Rejected: ${reason}`);
         setPendingVerifications(prev => prev.filter(u => u.id !== id));
         alert("반려 처리되었습니다.");
     };
@@ -379,6 +405,7 @@ const Admin = () => {
         const newRole = (currentRole === 'agent' || currentRole === 'broker') ? 'user' : 'agent';
         if (window.confirm(`이 회원의 등급을 '${newRole}'(으)로 변경하시겠습니까?`)) {
             await updateDoc(doc(db, "users", id), { role: newRole });
+            await logActivity('update', id, `Role changed from ${currentRole} to ${newRole}`);
             setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
         }
     };
@@ -453,6 +480,24 @@ const Admin = () => {
                     className={`flex-1 py-3 font-bold text-xs ${activeTab === 'subscription' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
                     결제/멤버십
+                </button>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'settings' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                >
+                    시스템 설정
+                </button>
+                <button
+                    onClick={() => setActiveTab('logs')}
+                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'logs' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                >
+                    활동 로그
+                </button>
+                <button
+                    onClick={() => setActiveTab('reviews')}
+                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'reviews' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                >
+                    리뷰 관리
                 </button>
             </div>
 
@@ -696,6 +741,12 @@ const Admin = () => {
                     <NotificationTab />
                 ) : activeTab === 'subscription' ? (
                     <SubscriptionTab />
+                ) : activeTab === 'settings' ? (
+                    <SettingsTab />
+                ) : activeTab === 'logs' ? (
+                    <ActivityLogTab />
+                ) : activeTab === 'reviews' ? (
+                    <ReviewMonitorTab />
                 ) : activeTab === 'users' ? (
                     // Users Tab
                     <div className="space-y-3">
