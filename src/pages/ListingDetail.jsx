@@ -373,10 +373,14 @@ const ListingDetail = () => {
                     <div className="mb-6">
                         <h3 className="font-bold text-sm mb-3">기본 정보</h3>
                         <div className="grid grid-cols-2 gap-2 text-sm">
-                            {listing.propertySpecs.brokerageTargetType && (
+                            {(listing.propertySpecs.brokerageTargetTypes?.length > 0 || listing.propertySpecs.brokerageTargetType) && (
                                 <div className="bg-gray-50 p-2 rounded col-span-2">
                                     <span className="text-gray-500">중개대상물 종류: </span>
-                                    <span className="font-medium">{listing.propertySpecs.brokerageTargetType}</span>
+                                    <span className="font-medium">
+                                        {listing.propertySpecs.brokerageTargetTypes?.length > 0 
+                                            ? [...listing.propertySpecs.brokerageTargetTypes, listing.propertySpecs.brokerageTargetOther].filter(Boolean).join(', ')
+                                            : listing.propertySpecs.brokerageTargetType}
+                                    </span>
                                 </div>
                             )}
                             {listing.propertySpecs.supplyArea && (
