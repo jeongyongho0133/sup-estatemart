@@ -444,11 +444,21 @@ const ListingDetail = () => {
                     </div>
                 )}
 
-                {/* Description */}
+                {/* Manual Description */}
+                {listing.manualDescription && (
+                    <div className="mb-6">
+                        <h3 className="font-bold text-sm mb-3">상세 설명 <span className="font-normal text-xs text-gray-400 bg-gray-100 px-1 py-0.5 rounded ml-1">작성자</span></h3>
+                        <div className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed bg-white border border-gray-100 p-4 rounded-xl shadow-sm">
+                            {listing.manualDescription}
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Description */}
                 {listing.description && (
                     <div className="mb-6">
-                        <h3 className="font-bold text-sm mb-3">상세 설명</h3>
-                        <div className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed bg-gray-50 p-3 rounded">
+                        <h3 className="font-bold text-sm mb-3">AI 상세 설명 <span className="font-normal text-xs text-purple-500 bg-purple-50 px-1 py-0.5 rounded ml-1">✨ 자동생성됨</span></h3>
+                        <div className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed bg-gray-50 p-4 rounded-xl">
                             {listing.description}
                         </div>
                     </div>

@@ -35,6 +35,7 @@ const ListingWrite = () => {
     const [propertyType, setPropertyType] = useState('원룸'); // Default Property Type
     const [transactionType, setTransactionType] = useState('매매'); // Default
     const [description, setDescription] = useState('');
+    const [manualDescription, setManualDescription] = useState('');
 
     // Detailed States
     const [deposit, setDeposit] = useState(''); // 보증금
@@ -121,6 +122,7 @@ const ListingWrite = () => {
                     setPropertyType(data.propertyType || '원룸');
                     setTransactionType(data.transactionType || '매매');
                     setDescription(data.description || '');
+                    setManualDescription(data.manualDescription || '');
 
                     setDeposit(data.deposit || '');
                     setMonthlyRent(data.monthlyRent || '');
@@ -481,6 +483,7 @@ const ListingWrite = () => {
                 address: cleanPayload({ sido, sigungu, eupmyeondong, detailAddress }),
                 coordinates: coordinates ? { lat: Number(coordinates.lat), lng: Number(coordinates.lng) } : null,
                 description: description || "",
+                manualDescription: manualDescription || "",
                 imageUrl: finalImageUrl,
                 createdAt: id ? undefined : serverTimestamp(), // Avoid overwriting createdAt on update
                 userId: currentUser.uid,
@@ -852,18 +855,25 @@ const ListingWrite = () => {
                     </div>
                 </div>
 
-                <div className="space-y-1">
-                    <div className="flex justify-between items-end mb-2">
-                        <label className="font-bold text-sm">상세 설명</label>
-                        <button
-                            onClick={handleGenerateDescription}
-                            disabled={aiLoading}
-                            className={`text-xs px-3 py-1.5 rounded-full flex items-center space-x-1 transition ${aiLoading ? 'bg-gray-100 text-gray-400' : 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md hover:shadow-lg'}`}
-                        >
-                            <span>{aiLoading ? '생성중...' : '✨ AI 설명 자동 생성'}</span>
-                        </button>
+                <div className="space-y-4">
+                    <div className="space-y-1">
+                        <label className="font-bold text-sm">상세 설명 (직접 작성)</label>
+                        <textarea value={manualDescription} onChange={(e) => setManualDescription(e.target.value)} placeholder="고객에게 강조하고 싶은 매물의 핵심 장점이나 특징을 자유롭게 적어주세요." className="w-full h-32 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
                     </div>
-                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="매물에 대한 자세한 설명을 작성해주세요. AI 버튼을 누르면 자동으로 생성됩니다." className="w-full h-60 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
+
+                    <div className="space-y-1">
+                        <div className="flex justify-between items-end mb-2">
+                            <label className="font-bold text-sm">AI 자동 상세 설명</label>
+                            <button
+                                onClick={handleGenerateDescription}
+                                disabled={aiLoading}
+                                className={`text-xs px-3 py-1.5 rounded-full flex items-center space-x-1 transition ${aiLoading ? 'bg-gray-100 text-gray-400' : 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-md hover:shadow-lg'}`}
+                            >
+                                <span>{aiLoading ? '생성중...' : '✨ AI 설명 덧붙이기'}</span>
+                            </button>
+                        </div>
+                        <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="AI 버튼을 누르면 위쪽에 입력한 기본 데이터를 바탕으로 화려한 상세 설명글이 자동으로 만들어집니다." className="w-full h-60 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
+                    </div>
                 </div>
             </div>
 
