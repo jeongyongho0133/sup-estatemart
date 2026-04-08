@@ -42,7 +42,7 @@ const Admin = () => {
             return;
         }
 
-        if (currentUser.role !== 'admin' && currentUser.email !== 'admin@estatemartet.com') {
+        if (currentUser.role !== 'admin' && currentUser.email !== 'grandcity@naver.com') {
             alert("관리자 권한이 없습니다.");
             navigate('/');
             return;

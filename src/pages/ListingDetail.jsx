@@ -16,6 +16,7 @@ const ListingDetail = () => {
     const [loading, setLoading] = useState(true);
     const [isLiked, setIsLiked] = useState(false);
     const [seller, setSeller] = useState(null);
+    const [similarListings, setSimilarListings] = useState([]);
 
     useEffect(() => {
         const fetchListing = async () => {
@@ -33,6 +34,8 @@ const ListingDetail = () => {
                             setSeller(sellerSnap.data());
                         }
                     }
+                    // Fetch Similar Listings (Hybrid)
+                    fetchSimilarListings(lData);
                 } else {
                     alert('매물을 찾을 수 없습니다.');
                     navigate('/');
@@ -43,6 +46,47 @@ const ListingDetail = () => {
                 navigate('/');
             } finally {
                 setLoading(false);
+            }
+        };
+
+        const fetchSimilarListings = async (current) => {
+            if (!current || !current.propertyType) return;
+            try {
+                let sims = [];
+                // 1. Same Type & Same Area (sigungu)
+                if (current.address?.sigungu) {
+                    const q1 = query(
+                        collection(db, "listings"),
+                        where("propertyType", "==", current.propertyType),
+                        where("address.sigungu", "==", current.address.sigungu),
+                        where("status", "==", "active")
+                    );
+                    const snap1 = await getDocs(q1);
+                    snap1.docs.forEach(d => {
+                        if (d.id !== current.id) sims.push({ id: d.id, ...d.data() });
+                    });
+                }
+
+                // 2. Fallback: Same Type (if area matches are less than 4)
+                if (sims.length < 4) {
+                    const q2 = query(
+                        collection(db, "listings"),
+                        where("propertyType", "==", current.propertyType),
+                        where("status", "==", "active")
+                    );
+                    const snap2 = await getDocs(q2);
+                    snap2.docs.forEach(d => {
+                        if (d.id !== current.id && !sims.find(s => s.id === d.id)) {
+                            sims.push({ id: d.id, ...d.data() });
+                        }
+                    });
+                }
+
+                // Shuffle slightly to show variety, then pick up to 6
+                const shuffled = sims.sort(() => 0.5 - Math.random());
+                setSimilarListings(shuffled.slice(0, 6));
+            } catch (err) {
+                console.error("Error fetching similar listings", err);
             }
         };
 
@@ -327,8 +371,14 @@ const ListingDetail = () => {
                 {/* Property Specs */}
                 {listing.propertySpecs && (
                     <div className="mb-6">
-                        <h3 className="font-bold text-sm mb-3">매물 정보</h3>
+                        <h3 className="font-bold text-sm mb-3">기본 정보</h3>
                         <div className="grid grid-cols-2 gap-2 text-sm">
+                            {listing.propertySpecs.brokerageTargetType && (
+                                <div className="bg-gray-50 p-2 rounded col-span-2">
+                                    <span className="text-gray-500">중개대상물 종류: </span>
+                                    <span className="font-medium">{listing.propertySpecs.brokerageTargetType}</span>
+                                </div>
+                            )}
                             {listing.propertySpecs.supplyArea && (
                                 <div className="bg-gray-50 p-2 rounded">
                                     <span className="text-gray-500">공급면적: </span>
@@ -353,16 +403,37 @@ const ListingDetail = () => {
                                     <span className="font-medium">{listing.propertySpecs.roomCount}방 / {listing.propertySpecs.bathroomCount || '?'}욕실</span>
                                 </div>
                             )}
+                            {listing.propertySpecs.direction && (
+                                <div className="bg-gray-50 p-2 rounded">
+                                    <span className="text-gray-500">방향(거실): </span>
+                                    <span className="font-medium">{listing.propertySpecs.direction}</span>
+                                </div>
+                            )}
+                            {listing.propertySpecs.parkingCapacity && (
+                                <div className="bg-gray-50 p-2 rounded">
+                                    <span className="text-gray-500">총 주차대수: </span>
+                                    <span className="font-medium">{listing.propertySpecs.parkingCapacity}대</span>
+                                </div>
+                            )}
                             {listing.propertySpecs.buildingName && (
                                 <div className="bg-gray-50 p-2 rounded col-span-2">
                                     <span className="text-gray-500">건물명: </span>
                                     <span className="font-medium">{listing.propertySpecs.buildingName}</span>
                                 </div>
                             )}
-                            {listing.propertySpecs.moveInDate && (
-                                <div className="bg-gray-50 p-2 rounded">
+                            {listing.propertySpecs.approvalDate && (
+                                <div className="bg-gray-50 p-2 rounded col-span-2">
+                                    <span className="text-gray-500">{listing.propertySpecs.approvalDateType || '건축물 등록일자'}: </span>
+                                    <span className="font-medium">{listing.propertySpecs.approvalDate}</span>
+                                </div>
+                            )}
+                            {(listing.propertySpecs.moveInType || listing.propertySpecs.moveInDate) && (
+                                <div className="bg-gray-50 p-2 rounded col-span-2">
                                     <span className="text-gray-500">입주일: </span>
-                                    <span className="font-medium">{listing.propertySpecs.moveInDate}</span>
+                                    <span className="font-medium">
+                                        {listing.propertySpecs.moveInType ? listing.propertySpecs.moveInType : (listing.propertySpecs.moveInDate || '')}
+                                        {listing.propertySpecs.moveInType === '날짜선택' && listing.propertySpecs.moveInDate ? ` (${listing.propertySpecs.moveInDate})` : ''}
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -415,7 +486,7 @@ const ListingDetail = () => {
                 {/* Agent Reviews Section */}
                 <div className="mb-6 border-t pt-6">
                     <div className="flex justify-between items-end mb-4">
-                        <h3 className="font-bold text-lg">중개사 후기</h3>
+                        <h3 className="font-bold text-lg">중개사 매물분석 및 임장 후기</h3>
                         {currentUser && currentUser.uid !== listing.userId && (
                             <button
                                 onClick={() => setShowReviewModal(true)}
@@ -427,6 +498,41 @@ const ListingDetail = () => {
                     </div>
                     <AgentReviews agentId={listing.userId} />
                 </div>
+
+                {/* Similar Listings Section */}
+                {similarListings.length > 0 && (
+                    <div className="mb-6 pt-2">
+                        <h3 className="font-bold text-lg mb-4">이 매물과 비슷한 맞춤 추천 🏠</h3>
+                        <div className="flex space-x-3 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4">
+                            {similarListings.map(sim => {
+                                const simLoc = sim.address?.sigungu ? `${sim.address.sido} ${sim.address.sigungu}` : (sim.location || '지역 정보 없음');
+                                const simPrice = sim.transactionType === '월세' 
+                                    ? `보증금 ${sim.deposit || 0} / 월 ${sim.monthlyRent || 0}` 
+                                    : `${sim.price || 0}만원`;
+
+                                return (
+                                    <div 
+                                        key={sim.id} 
+                                        onClick={() => navigate(`/listing/${sim.id}`)}
+                                        className="w-40 flex-shrink-0 bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:shadow-md transition"
+                                    >
+                                        <div className="h-28 bg-gray-200 relative">
+                                            <img src={sim.imageUrl || 'https://via.placeholder.com/300?text=No+Image'} alt={sim.title} className="w-full h-full object-cover" />
+                                            <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">
+                                                {sim.transactionType}
+                                            </div>
+                                        </div>
+                                        <div className="p-3">
+                                            <div className="text-[10px] text-gray-400 mb-1 truncate">{simLoc}</div>
+                                            <div className="font-bold text-sm text-gray-800 truncate mb-1">{sim.title}</div>
+                                            <div className="text-xs font-black text-market-orange truncate">{simPrice}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Sticky Bottom Actions */}

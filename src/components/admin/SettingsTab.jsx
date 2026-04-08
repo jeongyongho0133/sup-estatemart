@@ -21,7 +21,13 @@ const SettingsTab = () => {
 
         // Maintenance Mode
         isMaintenanceMode: false,
-        maintenanceMessage: '현재 시스템 점검 중입니다. 잠시 후 다시 이용해주세요.'
+        maintenanceMessage: '현재 시스템 점검 중입니다. 잠시 후 다시 이용해주세요.',
+
+        // Payment Settings
+        freeLimitNormal: 10,
+        freeLimitBroker: 100,
+        premiumListingPrice: 50000,
+        basicListingPrice: 10000,
     });
 
     useEffect(() => {
@@ -70,6 +76,10 @@ const SettingsTab = () => {
 
             await updateDoc(doc(db, "settings", "system"), {
                 ...settings,
+                freeLimitNormal: parseInt(settings.freeLimitNormal) || 0,
+                freeLimitBroker: parseInt(settings.freeLimitBroker) || 0,
+                premiumListingPrice: parseInt(settings.premiumListingPrice) || 0,
+                basicListingPrice: parseInt(settings.basicListingPrice) || 0,
                 forbiddenKeywords: keywordsArray,
                 updatedAt: serverTimestamp()
             });
@@ -159,6 +169,53 @@ const SettingsTab = () => {
                             type="text"
                             name="address"
                             value={settings.address}
+                            onChange={handleChange}
+                            className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Listing Registration & Payment Settings Section */}
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm mt-6">
+                <h3 className="text-sm font-bold text-gray-800 mb-4 border-b pb-2">매물 등록 및 결제 설정</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500">일반회원 무료 한도 (개)</label>
+                        <input
+                            type="number"
+                            name="freeLimitNormal"
+                            value={settings.freeLimitNormal}
+                            onChange={handleChange}
+                            className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500">중개사회원 무료 한도 (개)</label>
+                        <input
+                            type="number"
+                            name="freeLimitBroker"
+                            value={settings.freeLimitBroker}
+                            onChange={handleChange}
+                            className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500">기본 매물 추가 등록비 (원)</label>
+                        <input
+                            type="number"
+                            name="basicListingPrice"
+                            value={settings.basicListingPrice}
+                            onChange={handleChange}
+                            className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-500">추천 매물 지정 결제비 (원)</label>
+                        <input
+                            type="number"
+                            name="premiumListingPrice"
+                            value={settings.premiumListingPrice}
                             onChange={handleChange}
                             className="w-full p-2 border border-gray-200 rounded-lg text-sm"
                         />

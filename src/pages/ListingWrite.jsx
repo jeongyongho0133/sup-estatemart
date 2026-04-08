@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
 import { db, storage } from '../firebase';
-import { collection, doc, setDoc, getDoc, serverTimestamp, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, getDoc, serverTimestamp, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import KakaoMap from '../components/common/KakaoMap';
+import PaymentModal from '../components/common/PaymentModal';
 
 const SAMPLE_IMAGES = [
     "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80", // Apartment
@@ -16,9 +17,17 @@ const SAMPLE_IMAGES = [
 
 import { KOREA_ADDRESS_DATA, getSidoList } from '../constants/koreaAddressData';
 
+const TARGET_TYPES_BUILDING = [
+    '단독주택', '공동주택', '제1종근린생활', '제2종근린생활', '판매시설', '숙박시설', '위락시설', '업무시설', '오피스텔', '창고시설', '공장'
+];
+const TARGET_TYPES_LAND = [
+    '전', '답', '과수원', '목장용지', '임야', '광천지', '염전', '대', '공장용지', '학교용지', '주차장', '주유소용지', '창고용지', '도로', '철도용지', '제방', '하천', '구거', '유지', '양어장', '수도용지', '공원', '체육용지', '유원지', '종교용지', '사적지', '묘지', '잡종지'
+];
+
 const ListingWrite = () => {
     const navigate = useNavigate();
-    const { currentUser, userData } = useAuth();
+    const { id } = useParams();
+    const { currentUser, userData, loading: authLoading } = useAuth();
     const [images, setImages] = useState([]); // Preview URLs
     const [imageFiles, setImageFiles] = useState([]); // Actual File objects
     const [title, setTitle] = useState('');
@@ -42,6 +51,12 @@ const ListingWrite = () => {
     const [bathroomCount, setBathroomCount] = useState(''); // 욕실수
     const [moveInDate, setMoveInDate] = useState(''); // 입주가능일
     const [approvalDate, setApprovalDate] = useState(''); // 사용승인일
+    const [approvalDateType, setApprovalDateType] = useState('사용승인일');
+    const [moveInType, setMoveInType] = useState('즉시입주'); // 즉시입주, 협의가능, 날짜선택
+    const [brokerageTargetTypes, setBrokerageTargetTypes] = useState(['공동주택']); // 중개대상물 종류 다중선택
+    const [brokerageTargetOther, setBrokerageTargetOther] = useState(''); // 기타 직접입력
+    const [parkingCapacity, setParkingCapacity] = useState(''); // 주차대수
+    const [direction, setDirection] = useState('남향'); // 방향
 
     const [officePhone, setOfficePhone] = useState('');
     const [cellPhone, setCellPhone] = useState('');
@@ -62,6 +77,19 @@ const ListingWrite = () => {
     const [aiLoading, setAiLoading] = useState(false);
     const [forbiddenKeywords, setForbiddenKeywords] = useState([]);
 
+    const [systemSettings, setSystemSettings] = useState({
+        freeLimitNormal: 10,
+        freeLimitBroker: 100,
+        basicListingPrice: 10000,
+        premiumListingPrice: 50000
+    });
+    const [activeListingCount, setActiveListingCount] = useState(0);
+    const [isRecommended, setIsRecommended] = useState(false);
+
+    // Payment State
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentData, setPaymentData] = useState({ amount: 0, itemName: '' });
+
     // Safety Valve: Force reset submit state if it hangs for more than 40 seconds
     useEffect(() => {
         let timer;
@@ -75,6 +103,83 @@ const ListingWrite = () => {
         }
         return () => clearTimeout(timer);
     }, [isSubmitting]);
+
+    useEffect(() => {
+        const fetchListingForEdit = async () => {
+            if (!id) return;
+            try {
+                const docSnap = await getDoc(doc(db, "listings", id));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.userId !== currentUser?.uid && userData?.role !== 'admin') {
+                        alert("권한이 없습니다.");
+                        navigate(-1);
+                        return;
+                    }
+                    setTitle(data.title || '');
+                    setPrice(data.price || '');
+                    setPropertyType(data.propertyType || '원룸');
+                    setTransactionType(data.transactionType || '매매');
+                    setDescription(data.description || '');
+
+                    setDeposit(data.deposit || '');
+                    setMonthlyRent(data.monthlyRent || '');
+                    setManagementFee(data.managementFee || '');
+
+                    if (data.propertySpecs) {
+                        setSupplyArea(data.propertySpecs.supplyArea || '');
+                        setExclusiveArea(data.propertySpecs.exclusiveArea || '');
+                        setFloor(data.propertySpecs.floor || '');
+                        setTotalFloors(data.propertySpecs.totalFloors || '');
+                        setRoomCount(data.propertySpecs.roomCount || '');
+                        setBathroomCount(data.propertySpecs.bathroomCount || '');
+                        setBuildingName(data.propertySpecs.buildingName || '');
+                        setHo(data.propertySpecs.ho || '');
+                        setMoveInDate(data.propertySpecs.moveInDate || '');
+                        setApprovalDate(data.propertySpecs.approvalDate || '');
+                        setApprovalDateType(data.propertySpecs.approvalDateType || '사용승인일');
+                        setMoveInType(data.propertySpecs.moveInType || '즉시입주');
+                        setBrokerageTargetTypes(data.propertySpecs.brokerageTargetTypes || (data.propertySpecs.brokerageTargetType ? [data.propertySpecs.brokerageTargetType] : ['공동주택']));
+                        setBrokerageTargetOther(data.propertySpecs.brokerageTargetOther || '');
+                        setParkingCapacity(data.propertySpecs.parkingCapacity || '');
+                        setDirection(data.propertySpecs.direction || '남향');
+                    }
+
+                    if (data.brokerInfo) {
+                        setOfficePhone(data.brokerInfo.officePhone || '');
+                        setCellPhone(data.brokerInfo.cellPhone || '');
+                        setRegistrationNumber(data.brokerInfo.registrationNumber || '');
+                        setOfficeAddress(data.brokerInfo.officeAddress || '');
+                        setOfficeName(data.brokerInfo.officeName || '');
+                    }
+
+                    if (data.address) {
+                        setSido(data.address.sido || '');
+                        setSigungu(data.address.sigungu || '');
+                        setEupmyeondong(data.address.eupmyeondong || '');
+                        setDetailAddress(data.address.detailAddress || '');
+                    }
+
+                    if (data.coordinates) {
+                        setCoordinates(data.coordinates);
+                        setIsAddressVerified(true);
+                    }
+
+                    if (data.imageUrl && !images.includes(data.imageUrl)) {
+                        // For MVP, if it was edited, we only keep track of original or new. 
+                        // Real multiple images would load the array, but currently MVP only uploads one final image.
+                        setImages([data.imageUrl]);
+                    }
+
+                    setIsRecommended(data.isRecommended || false);
+                }
+            } catch (err) {
+                console.error("Error loading listing for edit", err);
+            }
+        };
+
+        fetchListingForEdit();
+    }, [id, currentUser, userData, navigate]);
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -100,17 +205,41 @@ const ListingWrite = () => {
         const fetchSystemSettings = async () => {
             try {
                 const settingsSnap = await getDoc(doc(db, "settings", "system"));
-                if (settingsSnap.exists() && settingsSnap.data().forbiddenKeywords) {
-                    setForbiddenKeywords(settingsSnap.data().forbiddenKeywords);
+                if (settingsSnap.exists()) {
+                    const data = settingsSnap.data();
+                    if (data.forbiddenKeywords) {
+                        setForbiddenKeywords(data.forbiddenKeywords);
+                    }
+                    setSystemSettings({
+                        freeLimitNormal: Number(data.freeLimitNormal) || 10,
+                        freeLimitBroker: Number(data.freeLimitBroker) || 100,
+                        basicListingPrice: Number(data.basicListingPrice) || 10000,
+                        premiumListingPrice: Number(data.premiumListingPrice) || 50000
+                    });
                 }
             } catch (error) {
                 console.error("Error fetching system settings", error);
             }
         };
 
+        const fetchUserListings = async () => {
+            if (currentUser?.uid) {
+                try {
+                    const q = query(collection(db, "listings"), where("userId", "==", currentUser.uid));
+                    const snap = await getDocs(q);
+                    // memory filter for 'active' to avoid composite index requirement
+                    const activeCount = snap.docs.filter(d => d.data().status === 'active').length;
+                    setActiveListingCount(activeCount);
+                } catch (e) {
+                    console.error("Error fetching user active listings", e);
+                }
+            }
+        };
+
         fetchCategories();
         fetchSystemSettings();
-    }, []);
+        fetchUserListings();
+    }, [currentUser]);
 
     // Image handler
     const handleImageChange = (e) => {
@@ -262,7 +391,7 @@ const ListingWrite = () => {
 
     // ... (helper functions)
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         if (isSubmitting) return;
         if (!currentUser) {
             alert("로그인이 필요한 서비스입니다.");
@@ -270,24 +399,57 @@ const ListingWrite = () => {
             return;
         }
 
-        try {
-            if (!title.trim()) { alert("제목을 입력해주세요."); return; }
+        if (!title.trim()) { alert("제목을 입력해주세요."); return; }
+        if (images.length < 1) { alert("사진을 최소 1장 이상 등록해야 합니다. 사진이 없다면 하단의 기본 샘플 이미지를 선택하세요."); return; }
 
-            // Check Forbidden Keywords
-            if (forbiddenKeywords.length > 0) {
-                const combinedText = (title + " " + description).toLowerCase();
-                const foundKeyword = forbiddenKeywords.find(k => combinedText.includes(k.toLowerCase()));
-                if (foundKeyword) {
-                    alert(`금지된 키워드가 포함되어 있습니다: "${foundKeyword}"\n제목이나 내용을 수정해주세요.`);
-                    return;
-                }
+        // Check Forbidden Keywords
+        if (forbiddenKeywords.length > 0) {
+            const combinedText = (title + " " + description).toLowerCase();
+            const foundKeyword = forbiddenKeywords.find(k => combinedText.includes(k.toLowerCase()));
+            if (foundKeyword) {
+                alert(`금지된 키워드가 포함되어 있습니다: "${foundKeyword}"\n제목이나 내용을 수정해주세요.`);
+                return;
             }
+        }
 
-            if (transactionType !== '월세' && !price) { alert("가격을 입력해주세요."); return; }
-            if (transactionType === '월세' && (!deposit || !monthlyRent)) { alert("보증금과 월세를 입력해주세요."); return; }
+        if (transactionType !== '월세' && !price) { alert("가격을 입력해주세요."); return; }
+        if (transactionType === '월세' && (!deposit || !monthlyRent)) { alert("보증금과 월세를 입력해주세요."); return; }
 
-            setIsSubmitting(true);
+        // If editing, skip payment
+        if (id) {
+            executeSaveListing({ amount: 0, method: 'free' });
+            return;
+        }
 
+        // Calculate limits and payment
+        const isBroker = userData?.role === 'agent' || userData?.role === 'admin';
+        const freeLimit = isBroker ? systemSettings.freeLimitBroker : systemSettings.freeLimitNormal;
+        const needsBasicPayment = activeListingCount >= freeLimit;
+
+        let amountToPay = 0;
+        let itemName = "";
+
+        if (isRecommended) {
+            amountToPay = systemSettings.premiumListingPrice;
+            itemName = "추천 매물 등록";
+        } else if (needsBasicPayment) {
+            amountToPay = systemSettings.basicListingPrice;
+            itemName = "기본 매물 등록 한도 초과 결제";
+        }
+
+        if (amountToPay > 0) {
+            setPaymentData({ amount: amountToPay, itemName });
+            setShowPaymentModal(true);
+            return;
+        }
+
+        // Process free registration
+        executeSaveListing({ amount: 0, method: 'free' });
+    };
+
+    const executeSaveListing = async (paymentResult) => {
+        setIsSubmitting(true);
+        try {
             let finalImageUrl = images.length > 0 ? images[0] : SAMPLE_IMAGES[Math.floor(Math.random() * SAMPLE_IMAGES.length)];
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error("네트워크 응답 시간이 초과되었습니다.")), 30000)
@@ -299,7 +461,7 @@ const ListingWrite = () => {
                 return newObj;
             };
 
-            const newDocRef = doc(collection(db, "listings"));
+            const newDocRef = id ? doc(db, "listings", id) : doc(collection(db, "listings"));
             const payload = cleanPayload({
                 id: newDocRef.id,
                 title,
@@ -310,7 +472,7 @@ const ListingWrite = () => {
                 propertyType,
                 transactionType,
                 propertySpecs: cleanPayload({
-                    supplyArea, exclusiveArea, floor, totalFloors, buildingName, ho, roomCount, bathroomCount, moveInDate, approvalDate
+                    supplyArea, exclusiveArea, floor, totalFloors, buildingName, ho, roomCount, bathroomCount, moveInDate, approvalDate, approvalDateType, moveInType, brokerageTargetTypes, brokerageTargetOther, parkingCapacity, direction
                 }),
                 brokerInfo: cleanPayload({
                     officePhone, cellPhone, registrationNumber, officeAddress, officeName
@@ -320,16 +482,37 @@ const ListingWrite = () => {
                 coordinates: coordinates ? { lat: Number(coordinates.lat), lng: Number(coordinates.lng) } : null,
                 description: description || "",
                 imageUrl: finalImageUrl,
-                createdAt: new Date(),
+                createdAt: id ? undefined : serverTimestamp(), // Avoid overwriting createdAt on update
                 userId: currentUser.uid,
                 sellerName: currentUser.displayName || '익명',
                 status: 'active',
                 isVerified: userData?.verificationStatus === 'verified',
-                likes: 0
+                isRecommended: isRecommended,
+                likes: id ? undefined : 0
             });
 
-            await Promise.race([setDoc(newDocRef, payload), timeoutPromise]);
+            // Remove undefined fields so updateDoc doesn't complain about them
+            const finalPayload = cleanPayload(payload);
+
+            const savePromise = id ? updateDoc(newDocRef, finalPayload) : setDoc(newDocRef, finalPayload);
+            await Promise.race([savePromise, timeoutPromise]);
+
+            // Save order record if payment was > 0
+            if (paymentResult.amount > 0) {
+                const orderRef = doc(collection(db, "orders"));
+                await setDoc(orderRef, {
+                    userId: currentUser.uid,
+                    listingId: newDocRef.id,
+                    itemName: paymentResult.itemName,
+                    amount: paymentResult.amount,
+                    method: paymentResult.method,
+                    createdAt: serverTimestamp(),
+                    status: 'completed'
+                });
+            }
+
             alert("매물이 성공적으로 등록되었습니다!");
+            setShowPaymentModal(false);
             navigate('/');
         } catch (e) {
             console.error(e);
@@ -339,13 +522,37 @@ const ListingWrite = () => {
         }
     };
 
+    if (currentUser && !currentUser.emailVerified) {
+        return (
+            <MobileLayout showNav={false}>
+                <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100">
+                    <button onClick={() => navigate(-1)} className="text-lg">닫기</button>
+                    <div className="font-bold">접근 제한</div>
+                    <div className="w-8"></div>
+                </header>
+                <div className="flex flex-col items-center justify-center p-6 h-[60vh] text-center">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl mb-4">
+                        ⚠️
+                    </div>
+                    <h2 className="text-xl font-bold mb-3">이메일 인증이 필요합니다</h2>
+                    <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+                        매물 등록 등 주요 기능을 이용하시려면<br />
+                        먼저 이메일 인증을 완료하셔야 합니다.<br />
+                        <span className="text-xs text-market-orange mt-2 block">가입하신 이메일의 메일함을 확인해주세요. (인증 후 앱 재로그인 필요)</span>
+                    </p>
+                    <button onClick={() => navigate('/')} className="px-6 py-3 bg-gray-900 text-white rounded-xl font-bold w-full max-w-[200px]">홈으로 이동</button>
+                </div>
+            </MobileLayout>
+        );
+    }
+
     return (
         <MobileLayout>
             <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100">
                 <button onClick={() => navigate(-1)} className="text-lg">닫기</button>
-                <div className="font-bold">내 물건 팔기</div>
+                <div className="font-bold">{id ? '매물 수정' : '내 물건 팔기'}</div>
                 <button onClick={handleSubmit} disabled={isSubmitting} className={`font-bold text-lg ${isSubmitting ? 'text-gray-400' : 'text-market-orange'}`}>
-                    {isSubmitting ? '저장중...' : '완료'}
+                    {isSubmitting ? '저장중...' : id ? '완료' : '등록'}
                 </button>
             </header>
 
@@ -366,7 +573,7 @@ const ListingWrite = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-xs text-gray-500">사진이 없다면 기본 이미지를 선택하세요</label>
+                    <label className="text-xs text-gray-500">사진이 없다면 기본 이미지를 선택하세요. 1개 이상 등록해야 합니다.</label>
                     <div className="flex space-x-2">
                         {SAMPLE_IMAGES.map((img, idx) => (
                             <button key={idx} onClick={() => setImages(prev => [...prev, img])} className="border border-gray-200 rounded-lg overflow-hidden w-16 h-16 hover:border-market-orange transition">
@@ -378,8 +585,32 @@ const ListingWrite = () => {
 
                 <div className="space-y-1">
                     <label className="font-bold text-sm">제목</label>
-                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="글 제목" className="w-full py-2 border-b border-gray-200 outline-none focus:border-market-orange" />
+                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="매물 제목" className="w-full py-2 border-b border-gray-200 outline-none focus:border-market-orange" />
                 </div>
+
+                {/* Premium / Add-ons UI */}
+                <div className={`p-4 rounded-xl border flex justify-between items-center shadow-sm transition-colors duration-300 ${isRecommended ? 'bg-orange-50 border-market-orange' : 'bg-gray-50 border-gray-200'}`}>
+                    <div>
+                        <h3 className={`font-bold text-sm transition-colors ${isRecommended ? 'text-market-orange' : 'text-gray-700'}`}>✨ 추천 매물로 등록하기</h3>
+                        <p className={`text-xs mt-1 transition-colors ${isRecommended ? 'text-orange-600/80' : 'text-gray-500'}`}>홈 화면 상단 영역에 노출됩니다. (결제)</p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                        <span className={`text-xs font-bold transition-colors ${isRecommended ? 'text-market-orange' : 'text-gray-400'}`}>
+                            {isRecommended ? 'ON' : 'OFF'}
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={isRecommended} onChange={(e) => setIsRecommended(e.target.checked)} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-market-orange"></div>
+                        </label>
+                    </div>
+                </div>
+
+                {/* Free Limits Banner */}
+                {!isRecommended && activeListingCount >= (userData?.role === 'agent' || userData?.role === 'admin' ? systemSettings.freeLimitBroker : systemSettings.freeLimitNormal) && (
+                    <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-xs font-medium border border-yellow-200 shadow-sm mt-2">
+                        💡 현재 <span className="font-bold">무료 등록 한도를 초과</span>하였습니다. 매물 추가 등록 시 <b>{systemSettings.basicListingPrice.toLocaleString()}원</b>의 결제가 필요합니다. (기존 활성 매물 개수: {activeListingCount}개)
+                    </div>
+                )}
 
                 <div className="space-y-3">
                     <label className="font-bold text-sm">위치</label>
@@ -441,46 +672,167 @@ const ListingWrite = () => {
                     </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm mt-4">
                     <label className="font-bold text-sm">가격 정보</label>
-                    {transactionType === '월세' ? (
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="보증금 (만원)" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                                <div className="text-[10px] text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
-                            </div>
-                            <div>
-                                <input type="number" value={monthlyRent} onChange={(e) => setMonthlyRent(e.target.value)} placeholder="월세" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                                <div className="text-[10px] text-market-orange mt-1">{formatPriceToKorean(monthlyRent)}</div>
-                            </div>
-                            <div className="col-span-2">
-                                <input type="number" value={managementFee} onChange={(e) => setManagementFee(e.target.value)} placeholder="관리비" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                                <div className="text-[10px] text-market-orange mt-1">{formatPriceToKorean(managementFee)}</div>
-                            </div>
+                    {transactionType === '매매' && (
+                        <div>
+                            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="매매금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(price)}</div>
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-2 gap-2">
+                    )}
+                    {transactionType === '전세' && (
+                        <div>
+                            <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="전세 보증금 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
+                        </div>
+                    )}
+                    {transactionType === '월세' && (
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="가격 (만원)" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                                <div className="text-[10px] text-market-orange mt-1">{formatPriceToKorean(price)}</div>
+                                <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="보증금 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                                <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
                             </div>
                             <div>
-                                <input type="number" value={managementFee} onChange={(e) => setManagementFee(e.target.value)} placeholder="관리비" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                                <div className="text-[10px] text-market-orange mt-1">{formatPriceToKorean(managementFee)}</div>
+                                <input type="number" value={monthlyRent} onChange={(e) => setMonthlyRent(e.target.value)} placeholder="월세금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                                <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(monthlyRent)}</div>
                             </div>
                         </div>
                     )}
+                    {transactionType === '교환' && (
+                        <div>
+                            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="교환 가치금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(price)}</div>
+                        </div>
+                    )}
+                    <div>
+                        <input type="number" value={managementFee} onChange={(e) => setManagementFee(e.target.value)} placeholder="관리비 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        <div className="text-[10px] text-gray-500 mt-1">* 관리비가 없으면 비워두세요.</div>
+                    </div>
                 </div>
 
-                <div className="space-y-2">
-                    <label className="font-bold text-sm">상세 정보</label>
-                    <div className="grid grid-cols-2 gap-2">
-                        <input type="number" value={supplyArea} onChange={(e) => setSupplyArea(e.target.value)} placeholder="공급면적 (㎡)" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="number" value={exclusiveArea} onChange={(e) => setExclusiveArea(e.target.value)} placeholder="전용면적 (㎡)" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="text" value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="층" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="text" value={totalFloors} onChange={(e) => setTotalFloors(e.target.value)} placeholder="전체층" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="number" value={roomCount} onChange={(e) => setRoomCount(e.target.value)} placeholder="방 수" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="number" value={bathroomCount} onChange={(e) => setBathroomCount(e.target.value)} placeholder="욕실 수" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                <div className="space-y-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm mt-4">
+                    <label className="font-bold text-sm">기본 정보</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2 space-y-2">
+                            <label className="text-[10px] text-gray-500 font-bold">중개대상물 종류 (다중 선택 가능)</label>
+                            
+                            <div className="text-[10px] text-gray-500 mt-2">건축물 용도</div>
+                            <div className="grid grid-cols-3 gap-2">
+                                {TARGET_TYPES_BUILDING.map(opt => (
+                                    <label key={opt} className="flex items-center space-x-1 cursor-pointer">
+                                        <input type="checkbox" checked={brokerageTargetTypes.includes(opt)} onChange={(e) => {
+                                            if (e.target.checked) setBrokerageTargetTypes(prev => [...prev, opt]);
+                                            else setBrokerageTargetTypes(prev => prev.filter(v => v !== opt));
+                                        }} className="rounded text-market-orange focus:ring-market-orange" />
+                                        <span className="text-xs text-gray-700">{opt}</span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            <div className="text-[10px] text-gray-500 mt-3 border-t pt-2">토지 지목 (28개)</div>
+                            <div className="grid grid-cols-4 gap-2">
+                                {TARGET_TYPES_LAND.map(opt => (
+                                    <label key={opt} className="flex items-center space-x-1 cursor-pointer">
+                                        <input type="checkbox" checked={brokerageTargetTypes.includes(opt)} onChange={(e) => {
+                                            if (e.target.checked) setBrokerageTargetTypes(prev => [...prev, opt]);
+                                            else setBrokerageTargetTypes(prev => prev.filter(v => v !== opt));
+                                        }} className="rounded text-market-orange focus:ring-market-orange" />
+                                        <span className="text-xs text-gray-700">{opt}</span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            <div className="text-[10px] text-gray-500 mt-3 border-t pt-2">기타 (직접입력)</div>
+                            <div className="flex items-center space-x-2">
+                                <label className="flex items-center space-x-1 cursor-pointer whitespace-nowrap">
+                                    <input type="checkbox" checked={brokerageTargetTypes.includes('기타')} onChange={(e) => {
+                                        if (e.target.checked) setBrokerageTargetTypes(prev => [...prev, '기타']);
+                                        else setBrokerageTargetTypes(prev => prev.filter(v => v !== '기타'));
+                                    }} className="rounded text-market-orange focus:ring-market-orange" />
+                                    <span className="text-xs text-gray-700">기타</span>
+                                </label>
+                                {brokerageTargetTypes.includes('기타') && (
+                                    <input type="text" value={brokerageTargetOther} onChange={e => setBrokerageTargetOther(e.target.value)} placeholder="직접 입력하세요" className="flex-1 p-2 border border-gray-200 rounded-lg outline-none text-xs" />
+                                )}
+                            </div>
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">공급면적 (㎡)</label>
+                            <input type="number" value={supplyArea} onChange={(e) => setSupplyArea(e.target.value)} placeholder="ex) 84" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">전용면적 (㎡)</label>
+                            <input type="number" value={exclusiveArea} onChange={(e) => setExclusiveArea(e.target.value)} placeholder="ex) 59" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">해당층</label>
+                            <input type="text" value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="ex) 5" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">총층수</label>
+                            <input type="text" value={totalFloors} onChange={(e) => setTotalFloors(e.target.value)} placeholder="ex) 15" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">방 수</label>
+                            <input type="number" value={roomCount} onChange={(e) => setRoomCount(e.target.value)} placeholder="ex) 3" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">욕실 수</label>
+                            <input type="number" value={bathroomCount} onChange={(e) => setBathroomCount(e.target.value)} placeholder="ex) 2" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">방향 (거실 기준 등)</label>
+                            <select value={direction} onChange={(e) => setDirection(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg outline-none text-sm">
+                                {['남향', '동향', '서향', '북향', '남동향', '남서향', '북동향', '북서향', '기타방향'].map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">총 주차대수</label>
+                            <input type="number" value={parkingCapacity} onChange={(e) => setParkingCapacity(e.target.value)} placeholder="ex) 1" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm mt-4">
+                    <label className="font-bold text-sm">일자 정보</label>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] text-gray-500 font-bold">건축물 인허가 일자</label>
+                            <div className="flex space-x-2 pb-1">
+                                {['사용승인일', '준공인가일', '사용검사일'].map(type => (
+                                    <button 
+                                        key={type} 
+                                        onClick={() => setApprovalDateType(type)}
+                                        className={`flex-1 py-1.5 border rounded-md text-xs transition ${approvalDateType === type ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                            <input type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                            <label className="text-[10px] text-gray-500 font-bold">입주 가능일</label>
+                            <div className="flex space-x-2">
+                                {['즉시입주', '협의가능', '날짜선택'].map(type => (
+                                    <button 
+                                        key={type} 
+                                        onClick={() => {
+                                            setMoveInType(type);
+                                            if (type !== '날짜선택') setMoveInDate('');
+                                        }}
+                                        className={`flex-1 py-2 border rounded-full text-xs font-bold transition ${moveInType === type ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                            {moveInType === '날짜선택' && (
+                                <input type="date" value={moveInDate} onChange={(e) => setMoveInDate(e.target.value)} className="w-full mt-2 p-3 border border-gray-200 rounded-lg outline-none text-sm animate-in fade-in" />
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -514,6 +866,17 @@ const ListingWrite = () => {
                     <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="매물에 대한 자세한 설명을 작성해주세요. AI 버튼을 누르면 자동으로 생성됩니다." className="w-full h-60 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
                 </div>
             </div>
+
+            <PaymentModal
+                isOpen={showPaymentModal}
+                onClose={() => {
+                    setShowPaymentModal(false);
+                    setIsSubmitting(false);
+                }}
+                onSuccess={(paymentResult) => executeSaveListing(paymentResult)}
+                amount={paymentData.amount}
+                itemName={paymentData.itemName}
+            />
         </MobileLayout>
     );
 };

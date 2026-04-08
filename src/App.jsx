@@ -74,6 +74,7 @@ function App() {
                         <Route path="/chats" element={<ChatList />} />
                         <Route path="/chat/:chatId" element={<ChatRoom />} />
                         <Route path="/write" element={<ListingWrite />} />
+                        <Route path="/edit/:id" element={<ListingWrite />} />
                         <Route path="/alerts" element={<NotificationList />} />
                         <Route path="/profile" element={<Profile />} />
                         <Route path="/notice" element={<NoticeList />} />

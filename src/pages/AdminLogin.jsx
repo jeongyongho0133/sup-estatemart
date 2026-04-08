@@ -88,7 +88,7 @@ const AdminLogin = () => {
                     <div>
                         <input
                             type="email"
-                            placeholder="admin@estatemartet.com"
+                            placeholder="grandcity@naver.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="w-full p-4 border border-gray-200 rounded-xl outline-none focus:border-gray-800 bg-gray-50"

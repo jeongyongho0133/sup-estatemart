@@ -314,21 +314,25 @@ const Home = () => {
             {/* Category Grid */}
             <div className="px-2 mb-6 transition-all duration-300">
                 <div className="grid grid-cols-6 gap-y-4 gap-x-0.5">
-                    {(isCategoryExpanded ? categories : categories.slice(0, 11)).map((cat) => (
+                    {(isCategoryExpanded || categories.length <= 12 ? categories : categories.slice(0, 11)).map((cat) => (
                         <button
                             key={cat.id || cat.name}
                             onClick={() => handleCategoryClick(cat)}
                             className="flex flex-col items-center justify-center space-y-1.5 p-0.5 hover:bg-gray-50 rounded-lg transition animate-in fade-in duration-300"
                         >
-                            <span className="text-lg bg-gray-100 p-2 rounded-xl flex items-center justify-center w-10 h-10">
-                                {cat.icon}
+                            <span className="text-lg bg-gray-100 p-2 rounded-xl flex items-center justify-center w-10 h-10 overflow-hidden">
+                                {cat.icon?.startsWith('http') ? (
+                                    <img src={cat.icon} alt={cat.name} className="w-full h-full object-contain" />
+                                ) : (
+                                    cat.icon
+                                )}
                             </span>
                             <span className="text-[10px] font-medium text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
                                 {cat.name}
                             </span>
                         </button>
                     ))}
-                    {!isCategoryExpanded && categories.length > 12 && (
+                    {!isCategoryExpanded && categories.length > 11 && (
                         <button
                             onClick={() => setIsCategoryExpanded(true)}
                             className="flex flex-col items-center justify-center space-y-1.5 p-0.5 hover:bg-gray-50 rounded-lg transition"
@@ -341,7 +345,7 @@ const Home = () => {
                             </span>
                         </button>
                     )}
-                    {isCategoryExpanded && categories.length > 12 && (
+                    {isCategoryExpanded && categories.length > 11 && (
                         <button
                             onClick={() => setIsCategoryExpanded(false)}
                             className="flex flex-col items-center justify-center space-y-1.5 p-0.5 hover:bg-gray-50 rounded-lg transition"
@@ -390,21 +394,63 @@ const Home = () => {
 
             <div className="h-2 bg-gray-100"></div>
 
+            {/* Recommended Listings (Horizontal Scroll) */}
+            {filteredListings.some(item => item.isRecommended || item.exposureLevel === 'top') && (
+                <div className="bg-white py-4 border-b border-gray-100">
+                    <div className="px-4 flex justify-between items-center mb-3">
+                        <h2 className="font-bold text-lg">✨ 놓치기 아쉬운 추천 매물</h2>
+                    </div>
+                    <div className="flex overflow-x-auto px-4 pb-2 space-x-3 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                        {filteredListings
+                            .filter(item => item.isRecommended || item.exposureLevel === 'top')
+                            .map(listing => (
+                                <div
+                                    key={`rec-${listing.id}`}
+                                    onClick={() => navigate(`/listing/${listing.id}`)}
+                                    className="snap-start flex-shrink-0 w-48 border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer"
+                                >
+                                    <div className="h-32 bg-gray-200 relative">
+                                        <img
+                                            src={listing.imageUrl || "https://via.placeholder.com/150"}
+                                            alt={listing.title}
+                                            className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute top-2 left-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">
+                                            추천 매물
+                                        </div>
+                                    </div>
+                                    <div className="p-3">
+                                        <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{listing.title}</h3>
+                                        <div className="text-[10px] text-gray-500 mt-1 truncate">{listing.location}</div>
+                                        <div className="font-bold text-market-orange text-sm mt-1">
+                                            {listing.transactionType === '월세'
+                                                ? `보증금 ${listing.deposit || 0} / 월세 ${listing.monthlyRent || 0}`
+                                                : `${listing.price || 0}만원`
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+                </div>
+            )}
+
             {/* Listing Feed Header */}
             <div className="px-4 py-4 flex justify-between items-center">
-                <h2 className="font-bold text-lg">우리 동네 인기 매물</h2>
+                <h2 className="font-bold text-lg">우리 동네 최근 등록 매물</h2>
                 <div className="flex bg-gray-100 p-1 rounded-lg">
-                    <button 
+                    <button
                         onClick={() => setViewMode('list')}
                         className={`text-xs px-3 py-1.5 font-bold rounded-md transition ${viewMode === 'list' ? 'bg-white shadow text-market-orange' : 'text-gray-500'}`}
                     >
-                         목록
+                        목록
                     </button>
-                    <button 
+                    <button
                         onClick={() => setViewMode('map')}
                         className={`text-xs px-3 py-1.5 font-bold rounded-md transition ${viewMode === 'map' ? 'bg-white shadow text-market-orange' : 'text-gray-500'}`}
                     >
-                         지도
+                        지도
                     </button>
                 </div>
             </div>
@@ -426,19 +472,19 @@ const Home = () => {
                         <div className="bg-white px-4 py-2 border-b flex justify-between items-center z-10">
                             <span className="text-xs font-bold text-gray-600">지도 서비스 선택</span>
                             <div className="flex space-x-2">
-                                <button 
+                                <button
                                     onClick={() => setMapProvider('kakao')}
                                     className={`text-[10px] px-3 py-1.5 rounded-full border transition ${mapProvider === 'kakao' ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                                 >
                                     카카오맵
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => setMapProvider('naver')}
                                     className={`text-[10px] px-3 py-1.5 rounded-full border transition ${mapProvider === 'naver' ? 'bg-green-500 text-white border-green-500 font-bold shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                                 >
                                     네이버지도
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => setMapProvider('google')}
                                     className={`text-[10px] px-3 py-1.5 rounded-full border transition ${mapProvider === 'google' ? 'bg-blue-500 text-white border-blue-500 font-bold shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
                                 >
