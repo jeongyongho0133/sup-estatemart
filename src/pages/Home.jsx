@@ -407,8 +407,8 @@ const Home = () => {
                                 const displayLocation = listing.address && listing.address.sido
                                     ? (listing.address.exposure === 'full'
                                         ? `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''} ${listing.address.detailAddress || ''}`.trim()
-                                        : `${listing.address.sido} ${listing.address.sigungu}`)
-                                    : (listing.location ? (listing.location.split(' ').slice(0, 2).join(' ')) : '');
+                                        : `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''}`.trim())
+                                    : (listing.location ? (listing.location.split(' ').slice(0, 3).join(' ')) : '');
 
                                 return (
                                     <div

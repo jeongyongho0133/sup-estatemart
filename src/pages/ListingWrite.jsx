@@ -70,7 +70,7 @@ const ListingWrite = () => {
     const [sigungu, setSigungu] = useState('');
     const [eupmyeondong, setEupmyeondong] = useState('');
     const [detailAddress, setDetailAddress] = useState(''); // Road name or Lot number
-    const [addressExposure, setAddressExposure] = useState('full'); // full, sigungu
+    const [addressExposure, setAddressExposure] = useState('full'); // full, dong
     const [coordinates, setCoordinates] = useState(null); // { lat, lng }
     const [isAddressVerified, setIsAddressVerified] = useState(false);
 
@@ -659,10 +659,10 @@ const ListingWrite = () => {
                                     상세주소 전체
                                 </button>
                                 <button 
-                                    onClick={() => setAddressExposure('sigungu')}
-                                    className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition ${addressExposure === 'sigungu' ? 'bg-white shadow text-market-orange' : 'text-gray-500 hover:text-gray-700'}`}
+                                    onClick={() => setAddressExposure('dong')}
+                                    className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition ${addressExposure === 'dong' ? 'bg-white shadow text-market-orange' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
-                                    시/군/구 까지만
+                                    읍/면/동 까지만
                                 </button>
                             </div>
                         </div>
