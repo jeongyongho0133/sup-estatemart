@@ -48,7 +48,22 @@ export const AuthProvider = ({ children }) => {
                             setUserData(null);
                             setCurrentUser(null);
                         } else {
-                            setUserData(data);
+                            // Session-based login increment
+                            let updatedData = { ...data };
+                            if (!sessionStorage.getItem('session_recorded')) {
+                                try {
+                                    const { updateDoc, increment, serverTimestamp } = await import('firebase/firestore');
+                                    await updateDoc(doc(db, "users", user.uid), {
+                                        loginCount: increment(1),
+                                        lastLoginAt: serverTimestamp()
+                                    });
+                                    sessionStorage.setItem('session_recorded', 'true');
+                                    updatedData.loginCount = (data.loginCount || 0) + 1;
+                                } catch (e) {
+                                    console.error("Failed to update login stats", e);
+                                }
+                            }
+                            setUserData(updatedData);
                         }
                     } else {
                         setUserData({ role: 'user' });

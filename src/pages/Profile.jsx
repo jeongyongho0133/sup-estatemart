@@ -238,12 +238,12 @@ const Profile = () => {
 
             <div className="p-4">
                 {/* Profile Info */}
-                <div className="flex items-center space-x-4 mb-6">
-                    <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden relative">
+                <div className="flex items-center space-x-4 mb-6 relative">
+                    <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden relative border border-gray-100 flex-shrink-0">
                         {currentUser.photoURL ? (
                             <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
-                            <span className="w-full h-full flex items-center justify-center text-3xl">👤</span>
+                            <span className="w-full h-full flex items-center justify-center text-3xl pb-1 text-gray-400">👤</span>
                         )}
                         {verificationStatus === 'verified' && (
                             <div className="absolute bottom-0 right-0 bg-blue-500 text-white text-[10px] px-1 rounded-tl-lg font-bold">
@@ -251,29 +251,35 @@ const Profile = () => {
                             </div>
                         )}
                     </div>
-                    <div>
-                        <div className="flex items-center space-x-2">
-                            <div className="font-bold text-lg">{currentUser.displayName || currentUser.email}</div>
-                            {userData?.isPremium && (
-                                <span className="text-[10px] px-2 py-0.5 bg-gradient-to-r from-orange-400 to-market-orange text-white rounded-full font-black shadow-sm">
-                                    PREMIUM
-                                </span>
-                            )}
-                            {verificationStatus === 'verified' && (
-                                <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded font-bold">
-                                    인증됨
-                                </span>
-                            )}
+                    <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <div className="font-bold text-lg leading-tight flex items-center space-x-2">
+                                    <span>{currentUser.displayName || '사용자'}</span>
+                                    {userData?.isPremium && (
+                                        <span className="text-[10px] px-1.5 py-0.5 bg-gradient-to-r from-orange-400 to-market-orange text-white rounded-md font-black shadow-sm">
+                                            PREMIUM
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1 flex items-center">
+                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded mr-1.5 font-medium">ID</span>
+                                    {currentUser.email}
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex items-center space-x-2 mt-0.5">
-                            <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                                {role === 'broker' || role === 'agent' ? '공인중개사' : '일반 회원'}
+                        <div className="flex items-center space-x-2 mt-2">
+                            <span className={`text-[11px] font-bold px-2 py-1 rounded-md ${
+                                role === 'admin' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                role === 'broker' || role === 'agent' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 
+                                'bg-gray-50 text-gray-600 border border-gray-100'
+                            }`}>
+                                {role === 'admin' ? '관리자' : (role === 'broker' || role === 'agent' ? '부동산 중개사' : '일반 회원')}
                             </span>
-                            {userData?.isPremium && (
-                                <span className="text-[10px] text-market-orange font-bold uppercase">
-                                    {userData.premiumUntil?.seconds ? `~${new Date(userData.premiumUntil.seconds * 1000).toLocaleDateString()}` : 'Premium Plan'}
-                                </span>
-                            )}
+                            <span className="text-[11px] font-medium px-2 py-1 bg-green-50 text-green-700 border border-green-100 rounded-md flex items-center space-x-1">
+                                <span>방문</span>
+                                <span className="font-bold">{userData?.loginCount || 1}회</span>
+                            </span>
                         </div>
                     </div>
                 </div>
