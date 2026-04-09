@@ -281,9 +281,12 @@ const ListingDetail = () => {
         return `${listing.price || '0'}만원`;
     };
 
-    // Build location string
-    const locationStr = listing.location ||
-        `${listing.address?.sido || ''} ${listing.address?.sigungu || ''} ${listing.address?.eupmyeondong || ''}`.trim();
+    // Build location string based on exposure
+    const locationStr = listing.address && listing.address.sido
+        ? (listing.address.exposure === 'full'
+            ? `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''} ${listing.address.detailAddress || ''} ${listing.propertySpecs?.buildingName ? `(${listing.propertySpecs.buildingName})` : ''}`.trim()
+            : `${listing.address.sido} ${listing.address.sigungu}`)
+        : (listing.location ? (listing.location.split(' ').slice(0, 2).join(' ')) : '');
 
     // Get coordinates for map
     const mapLat = listing.coordinates?.lat || 37.498095;

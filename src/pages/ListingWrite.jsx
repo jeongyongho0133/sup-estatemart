@@ -70,6 +70,7 @@ const ListingWrite = () => {
     const [sigungu, setSigungu] = useState('');
     const [eupmyeondong, setEupmyeondong] = useState('');
     const [detailAddress, setDetailAddress] = useState(''); // Road name or Lot number
+    const [addressExposure, setAddressExposure] = useState('full'); // full, sigungu
     const [coordinates, setCoordinates] = useState(null); // { lat, lng }
     const [isAddressVerified, setIsAddressVerified] = useState(false);
 
@@ -160,6 +161,7 @@ const ListingWrite = () => {
                         setSigungu(data.address.sigungu || '');
                         setEupmyeondong(data.address.eupmyeondong || '');
                         setDetailAddress(data.address.detailAddress || '');
+                        setAddressExposure(data.address.exposure || 'full');
                     }
 
                     if (data.coordinates) {
@@ -480,7 +482,7 @@ const ListingWrite = () => {
                     officePhone, cellPhone, registrationNumber, officeAddress, officeName
                 }),
                 location: `${sido} ${sigungu} ${eupmyeondong} ${detailAddress}`.trim(),
-                address: cleanPayload({ sido, sigungu, eupmyeondong, detailAddress }),
+                address: cleanPayload({ sido, sigungu, eupmyeondong, detailAddress, exposure: addressExposure }),
                 coordinates: coordinates ? { lat: Number(coordinates.lat), lng: Number(coordinates.lng) } : null,
                 description: description || "",
                 manualDescription: manualDescription || "",
@@ -645,6 +647,26 @@ const ListingWrite = () => {
                             <input type="text" value={buildingName} onChange={(e) => setBuildingName(e.target.value)} placeholder="동" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
                             <input type="text" value={ho} onChange={(e) => setHo(e.target.value)} placeholder="호" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
                         </div>
+                        
+                        {/* Address Exposure Toggle */}
+                        <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                            <span className="text-xs font-bold text-gray-700">고객에게 노출될 주소 범위</span>
+                            <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
+                                <button 
+                                    onClick={() => setAddressExposure('full')}
+                                    className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition ${addressExposure === 'full' ? 'bg-white shadow text-market-orange' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    상세주소 전체
+                                </button>
+                                <button 
+                                    onClick={() => setAddressExposure('sigungu')}
+                                    className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition ${addressExposure === 'sigungu' ? 'bg-white shadow text-market-orange' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    시/군/구 까지만
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                     {coordinates && (
                         <div className="w-full h-48 rounded-lg overflow-hidden border border-gray-200 mt-2 relative">

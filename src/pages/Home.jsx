@@ -404,9 +404,11 @@ const Home = () => {
                         {filteredListings
                             .filter(item => item.isRecommended || item.exposureLevel === 'top')
                             .map(listing => {
-                                const displayLocation = listing.address && listing.address.sido 
-                                    ? `${listing.address.sido} ${listing.address.sigungu}` 
-                                    : (listing.location ? listing.location.split(' ').slice(0, 2).join(' ') : '');
+                                const displayLocation = listing.address && listing.address.sido
+                                    ? (listing.address.exposure === 'full'
+                                        ? `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''} ${listing.address.detailAddress || ''}`.trim()
+                                        : `${listing.address.sido} ${listing.address.sigungu}`)
+                                    : (listing.location ? (listing.location.split(' ').slice(0, 2).join(' ')) : '');
 
                                 return (
                                     <div
