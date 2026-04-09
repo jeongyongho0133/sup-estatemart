@@ -227,8 +227,8 @@ const Home = () => {
                 </div>
 
                 {showLocationMenu && (
-                    <div className="absolute top-12 left-4 w-32 bg-white shadow-xl border border-gray-100 rounded-lg overflow-hidden z-20">
-                        {['전체', '역삼동', '서초동', '논현동'].map(loc => (
+                    <div className="absolute top-5 left-4 w-36 bg-white shadow-xl border border-gray-100 rounded-lg overflow-hidden z-20">
+                        {['전체', '서울특별시', '부산광역시', '인천광역시', '대구광역시', '대전광역시', , '울산광역시', '광주광역시', '세종특별자치시', '강원특별자치도', '충청북도', '충청남도', '전북특별자치도', '전라남도', '경상북도', '경상남도', '제주특별자치도'].map(loc => (
                             <button
                                 key={loc}
                                 onClick={() => handleLocationChange(loc)}
@@ -284,7 +284,7 @@ const Home = () => {
             {/* Intro Search Section */}
             <div className="px-4 py-6 bg-gradient-to-b from-orange-50 to-white">
                 <h1 className="text-2xl font-bold mb-4 leading-tight">
-                    어떤 집을 찾고 계신가요?<br />
+                    어떤 부동산을 찾고 계신가요?<br />
                     <span className="text-market-orange">에스테이트 마켓</span>에서 찾아보세요.
                 </h1>
                 <div className="relative">
@@ -403,34 +403,40 @@ const Home = () => {
                     <div className="flex overflow-x-auto px-4 pb-2 space-x-3 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                         {filteredListings
                             .filter(item => item.isRecommended || item.exposureLevel === 'top')
-                            .map(listing => (
-                                <div
-                                    key={`rec-${listing.id}`}
-                                    onClick={() => navigate(`/listing/${listing.id}`)}
-                                    className="snap-start flex-shrink-0 w-48 border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer"
-                                >
-                                    <div className="h-32 bg-gray-200 relative">
-                                        <img
-                                            src={listing.imageUrl || "https://via.placeholder.com/150"}
-                                            alt={listing.title}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute top-2 left-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">
-                                            추천 매물
+                            .map(listing => {
+                                const displayLocation = listing.address && listing.address.sido 
+                                    ? `${listing.address.sido} ${listing.address.sigungu}` 
+                                    : (listing.location ? listing.location.split(' ').slice(0, 2).join(' ') : '');
+
+                                return (
+                                    <div
+                                        key={`rec-${listing.id}`}
+                                        onClick={() => navigate(`/listing/${listing.id}`)}
+                                        className="snap-start flex-shrink-0 w-48 border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer"
+                                    >
+                                        <div className="h-32 bg-gray-200 relative">
+                                            <img
+                                                src={listing.imageUrl || "https://via.placeholder.com/150"}
+                                                alt={listing.title}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <div className="absolute top-2 left-2 bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">
+                                                추천 매물
+                                            </div>
+                                        </div>
+                                        <div className="p-3">
+                                            <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{listing.title}</h3>
+                                            <div className="text-[10px] text-gray-500 mt-1 truncate">{displayLocation}</div>
+                                            <div className="font-bold text-market-orange text-sm mt-1">
+                                                {listing.transactionType === '월세'
+                                                    ? `보증금 ${listing.deposit || 0} / 월세 ${listing.monthlyRent || 0}`
+                                                    : `${listing.price || 0}만원`
+                                                }
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="p-3">
-                                        <h3 className="text-sm font-bold text-gray-900 line-clamp-1">{listing.title}</h3>
-                                        <div className="text-[10px] text-gray-500 mt-1 truncate">{listing.location}</div>
-                                        <div className="font-bold text-market-orange text-sm mt-1">
-                                            {listing.transactionType === '월세'
-                                                ? `보증금 ${listing.deposit || 0} / 월세 ${listing.monthlyRent || 0}`
-                                                : `${listing.price || 0}만원`
-                                            }
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
+                                );
+                            })
                         }
                     </div>
                 </div>

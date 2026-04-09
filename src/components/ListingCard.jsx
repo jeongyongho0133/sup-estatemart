@@ -47,6 +47,10 @@ const ListingCard = ({ listing }) => {
         return result + '만원';
     };
 
+    const displayLocation = listing.address && listing.address.sido 
+        ? `${listing.address.sido} ${listing.address.sigungu}` 
+        : (listing.location ? listing.location.split(' ').slice(0, 2).join(' ') : '');
+
     return (
         <div
             onClick={() => navigate(`/listing/${listing.id}`)}
@@ -96,7 +100,7 @@ const ListingCard = ({ listing }) => {
                         )}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5 truncate">
-                        {listing.location}
+                        {displayLocation}
                     </div>
                     <div className="text-[10px] text-gray-400">
                         {formatDate(listing.createdAt)}
