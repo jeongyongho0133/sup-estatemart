@@ -248,7 +248,13 @@ const ListingWrite = () => {
     // Image handler
     const handleImageChange = (e) => {
         if (e.target.files) {
-            const files = Array.from(e.target.files);
+            let files = Array.from(e.target.files);
+            
+            if (images.length + files.length > 10) {
+                alert("이미지는 최대 10장까지만 업로드 가능합니다.");
+                files = files.slice(0, 10 - images.length);
+            }
+
             const previewUrls = files.map((file) => URL.createObjectURL(file));
             setImages((prev) => prev.concat(previewUrls));
             setImageFiles((prev) => prev.concat(files));
@@ -578,7 +584,11 @@ const ListingWrite = () => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-xs text-gray-500">사진이 없다면 기본 이미지를 선택하세요. 1개 이상 등록해야 합니다.</label>
+                    <label className="text-xs text-gray-500 leading-relaxed block">
+                        사진이 없다면 기본 이미지를 선택하세요. <br/>
+                        <span className="font-bold text-gray-700">▶ 등록 조건:</span> 최소 1장 이상 등록 필수 (최대 10장) <br/>
+                        <span className="font-bold text-gray-700">▶ 지원 형식:</span> JPG, JPEG, PNG, WEBP
+                    </label>
                     <div className="flex space-x-2">
                         {SAMPLE_IMAGES.map((img, idx) => (
                             <button key={idx} onClick={() => setImages(prev => [...prev, img])} className="border border-gray-200 rounded-lg overflow-hidden w-16 h-16 hover:border-market-orange transition">
