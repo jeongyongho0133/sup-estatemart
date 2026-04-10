@@ -568,64 +568,65 @@ const ListingWrite = () => {
             </header>
 
             <div className="p-4 space-y-6 pb-20">
-                {/* Image Upload */}
-                <div className="flex space-x-3 overflow-x-auto no-scrollbar py-2">
-                    <label className="flex flex-col items-center justify-center border border-gray-300 rounded-lg flex-shrink-0 cursor-pointer text-gray-400 w-20 h-20">
-                        <span className="text-2xl">📷</span>
-                        <span className="text-xs">{images.length}/10</span>
-                        <input type="file" multiple className="hidden" onChange={handleImageChange} accept="image/*" />
-                    </label>
-                    {images.map((img, idx) => (
-                        <div key={idx} className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 relative">
-                            <img src={img} alt="preview" className="w-full h-full object-cover" />
-                            <button onClick={() => handleRemoveImage(idx)} className="absolute top-0 right-0 bg-black/50 text-white rounded-bl-lg w-5 h-5 flex items-center justify-center text-xs">x</button>
-                        </div>
-                    ))}
-                </div>
-
                 <div className="space-y-2">
-                    <label className="text-xs text-gray-500 leading-relaxed block">
-                        사진이 없다면 기본 이미지를 선택하세요. <br/>
-                        <span className="font-bold text-gray-700">▶ 등록 조건:</span> 최소 1장 이상 등록 필수 (최대 10장) <br/>
-                        <span className="font-bold text-gray-700">▶ 지원 형식:</span> JPG, JPEG, PNG, WEBP
-                    </label>
-                    <div className="flex space-x-2">
-                        {SAMPLE_IMAGES.map((img, idx) => (
-                            <button key={idx} onClick={() => setImages(prev => [...prev, img])} className="border border-gray-200 rounded-lg overflow-hidden w-16 h-16 hover:border-market-orange transition">
-                                <img src={img} alt="Sample" className="w-full h-full object-cover" />
+                    <label className="font-bold text-sm">매물 종류</label>
+                    <div className="grid grid-cols-4 gap-2">
+                        {categories.map(cat => (
+                            <button key={cat.id} onClick={() => setPropertyType(cat.name)} className={`py-2 border rounded-md text-xs font-medium transition ${propertyType === cat.name ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                {cat.name}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                <div className="space-y-1">
-                    <label className="font-bold text-sm">제목</label>
-                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="매물 제목" className="w-full py-2 border-b border-gray-200 outline-none focus:border-market-orange" />
+                <div className="space-y-2">
+                    <label className="font-bold text-sm">거래 방식</label>
+                    <div className="flex space-x-2">
+                        {['매매', '전세', '월세', '교환'].map(type => (
+                            <button key={type} onClick={() => setTransactionType(type)} className={`px-4 py-2 border rounded-full text-sm transition ${transactionType === type ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                {type}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Premium / Add-ons UI */}
-                <div className={`p-4 rounded-xl border flex justify-between items-center shadow-sm transition-colors duration-300 ${isRecommended ? 'bg-orange-50 border-market-orange' : 'bg-gray-50 border-gray-200'}`}>
+                <div className="space-y-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm mt-4">
+                    <label className="font-bold text-sm">가격 정보</label>
+                    {transactionType === '매매' && (
+                        <div>
+                            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="매매금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(price)}</div>
+                        </div>
+                    )}
+                    {transactionType === '전세' && (
+                        <div>
+                            <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="전세 보증금 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
+                        </div>
+                    )}
+                    {transactionType === '월세' && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="보증금 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                                <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
+                            </div>
+                            <div>
+                                <input type="number" value={monthlyRent} onChange={(e) => setMonthlyRent(e.target.value)} placeholder="월세금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                                <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(monthlyRent)}</div>
+                            </div>
+                        </div>
+                    )}
+                    {transactionType === '교환' && (
+                        <div>
+                            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="교환 가치금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(price)}</div>
+                        </div>
+                    )}
                     <div>
-                        <h3 className={`font-bold text-sm transition-colors ${isRecommended ? 'text-market-orange' : 'text-gray-700'}`}>✨ 추천 매물로 등록하기</h3>
-                        <p className={`text-xs mt-1 transition-colors ${isRecommended ? 'text-orange-600/80' : 'text-gray-500'}`}>홈 화면 상단 영역에 노출됩니다. (결제)</p>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                        <span className={`text-xs font-bold transition-colors ${isRecommended ? 'text-market-orange' : 'text-gray-400'}`}>
-                            {isRecommended ? 'ON' : 'OFF'}
-                        </span>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked={isRecommended} onChange={(e) => setIsRecommended(e.target.checked)} className="sr-only peer" />
-                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-market-orange"></div>
-                        </label>
+                        <input type="number" value={managementFee} onChange={(e) => setManagementFee(e.target.value)} placeholder="관리비 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        <div className="text-[10px] text-gray-500 mt-1">* 관리비가 없으면 비워두세요.</div>
                     </div>
                 </div>
-
-                {/* Free Limits Banner */}
-                {!isRecommended && activeListingCount >= (userData?.role === 'agent' || userData?.role === 'admin' ? systemSettings.freeLimitBroker : systemSettings.freeLimitNormal) && (
-                    <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-xs font-medium border border-yellow-200 shadow-sm mt-2">
-                        💡 현재 <span className="font-bold">무료 등록 한도를 초과</span>하였습니다. 매물 추가 등록 시 <b>{systemSettings.basicListingPrice.toLocaleString()}원</b>의 결제가 필요합니다. (기존 활성 매물 개수: {activeListingCount}개)
-                    </div>
-                )}
 
                 <div className="space-y-3">
                     <label className="font-bold text-sm">위치</label>
@@ -685,63 +686,62 @@ const ListingWrite = () => {
                     )}
                 </div>
 
-                <div className="space-y-2">
-                    <label className="font-bold text-sm">매물 종류</label>
-                    <div className="grid grid-cols-4 gap-2">
-                        {categories.map(cat => (
-                            <button key={cat.id} onClick={() => setPropertyType(cat.name)} className={`py-2 border rounded-md text-xs font-medium transition ${propertyType === cat.name ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                {cat.name}
-                            </button>
-                        ))}
-                    </div>
+                <div className="space-y-1">
+                    <label className="font-bold text-sm">제목</label>
+                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="매물 제목" className="w-full py-2 border-b border-gray-200 outline-none focus:border-market-orange" />
                 </div>
 
-                <div className="space-y-2">
-                    <label className="font-bold text-sm">거래 방식</label>
-                    <div className="flex space-x-2">
-                        {['매매', '전세', '월세', '교환'].map(type => (
-                            <button key={type} onClick={() => setTransactionType(type)} className={`px-4 py-2 border rounded-full text-sm transition ${transactionType === type ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                {type}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="space-y-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm mt-4">
-                    <label className="font-bold text-sm">가격 정보</label>
-                    {transactionType === '매매' && (
-                        <div>
-                            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="매매금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
-                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(price)}</div>
-                        </div>
-                    )}
-                    {transactionType === '전세' && (
-                        <div>
-                            <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="전세 보증금 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
-                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
-                        </div>
-                    )}
-                    {transactionType === '월세' && (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <input type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} placeholder="보증금 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
-                                <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(deposit)}</div>
-                            </div>
-                            <div>
-                                <input type="number" value={monthlyRent} onChange={(e) => setMonthlyRent(e.target.value)} placeholder="월세금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
-                                <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(monthlyRent)}</div>
-                            </div>
-                        </div>
-                    )}
-                    {transactionType === '교환' && (
-                        <div>
-                            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="교환 가치금액 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
-                            <div className="text-xs text-market-orange mt-1">{formatPriceToKorean(price)}</div>
-                        </div>
-                    )}
+                {/* Premium / Add-ons UI */}
+                <div className={`p-4 rounded-xl border flex justify-between items-center shadow-sm transition-colors duration-300 ${isRecommended ? 'bg-orange-50 border-market-orange' : 'bg-gray-50 border-gray-200'}`}>
                     <div>
-                        <input type="number" value={managementFee} onChange={(e) => setManagementFee(e.target.value)} placeholder="관리비 (만원)" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
-                        <div className="text-[10px] text-gray-500 mt-1">* 관리비가 없으면 비워두세요.</div>
+                        <h3 className={`font-bold text-sm transition-colors ${isRecommended ? 'text-market-orange' : 'text-gray-700'}`}>✨ 추천 매물로 등록하기</h3>
+                        <p className={`text-xs mt-1 transition-colors ${isRecommended ? 'text-orange-600/80' : 'text-gray-500'}`}>홈 화면 상단 영역에 노출됩니다. (결제)</p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                        <span className={`text-xs font-bold transition-colors ${isRecommended ? 'text-market-orange' : 'text-gray-400'}`}>
+                            {isRecommended ? 'ON' : 'OFF'}
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={isRecommended} onChange={(e) => setIsRecommended(e.target.checked)} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-market-orange"></div>
+                        </label>
+                    </div>
+                </div>
+
+                {/* Free Limits Banner */}
+                {!isRecommended && activeListingCount >= (userData?.role === 'agent' || userData?.role === 'admin' ? systemSettings.freeLimitBroker : systemSettings.freeLimitNormal) && (
+                    <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-xs font-medium border border-yellow-200 shadow-sm mt-2">
+                        💡 현재 <span className="font-bold">무료 등록 한도를 초과</span>하였습니다. 매물 추가 등록 시 <b>{systemSettings.basicListingPrice.toLocaleString()}원</b>의 결제가 필요합니다. (기존 활성 매물 개수: {activeListingCount}개)
+                    </div>
+                )}
+
+                {/* Image Upload */}
+                <div className="flex space-x-3 overflow-x-auto no-scrollbar py-2">
+                    <label className="flex flex-col items-center justify-center border border-gray-300 rounded-lg flex-shrink-0 cursor-pointer text-gray-400 w-20 h-20">
+                        <span className="text-2xl">📷</span>
+                        <span className="text-xs">{images.length}/10</span>
+                        <input type="file" multiple className="hidden" onChange={handleImageChange} accept="image/*" />
+                    </label>
+                    {images.map((img, idx) => (
+                        <div key={idx} className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 relative">
+                            <img src={img} alt="preview" className="w-full h-full object-cover" />
+                            <button onClick={() => handleRemoveImage(idx)} className="absolute top-0 right-0 bg-black/50 text-white rounded-bl-lg w-5 h-5 flex items-center justify-center text-xs">x</button>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs text-gray-500 leading-relaxed block">
+                        사진이 없다면 기본 이미지를 선택하세요. <br/>
+                        <span className="font-bold text-gray-700">▶ 등록 조건:</span> 최소 1장 이상 등록 필수 (최대 10장) <br/>
+                        <span className="font-bold text-gray-700">▶ 지원 형식:</span> JPG, JPEG, PNG, WEBP
+                    </label>
+                    <div className="flex space-x-2">
+                        {SAMPLE_IMAGES.map((img, idx) => (
+                            <button key={idx} onClick={() => setImages(prev => [...prev, img])} className="border border-gray-200 rounded-lg overflow-hidden w-16 h-16 hover:border-market-orange transition">
+                                <img src={img} alt="Sample" className="w-full h-full object-cover" />
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -871,22 +871,6 @@ const ListingWrite = () => {
                     </div>
                 </div>
 
-                <div className="space-y-2 border-t pt-4">
-                    <label className="font-bold text-sm">중개사 정보</label>
-                    <div className="grid grid-cols-2 gap-2">
-                        <input type="text" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="상호명" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="text" value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value)} placeholder="등록번호" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                    </div>
-                    <div className="flex gap-2">
-                        <input type="text" value={officeAddress} readOnly placeholder="사무실 주소" className="flex-1 p-2 border border-gray-200 rounded-md outline-none bg-gray-50 text-sm" />
-                        <button onClick={() => openPostcode('broker')} className="bg-gray-800 text-white text-xs px-3 rounded-md">검색</button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <input type="text" value={officePhone} onChange={(e) => setOfficePhone(e.target.value)} placeholder="사무실 전화" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                        <input type="text" value={cellPhone} onChange={(e) => setCellPhone(e.target.value)} placeholder="휴대폰" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                    </div>
-                </div>
-
                 <div className="space-y-4">
                     <div className="space-y-1">
                         <label className="font-bold text-sm">상세 설명 (직접 작성)</label>
@@ -907,7 +891,23 @@ const ListingWrite = () => {
                         <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="AI 버튼을 누르면 위쪽에 입력한 기본 데이터를 바탕으로 화려한 상세 설명글이 자동으로 만들어집니다." className="w-full h-60 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
                     </div>
                 </div>
-            </div>
+<div className="space-y-2 border-t pt-4">
+                    <label className="font-bold text-sm">중개사 정보</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <input type="text" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="상호명" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                        <input type="text" value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value)} placeholder="등록번호" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                    </div>
+                    <div className="flex gap-2">
+                        <input type="text" value={officeAddress} readOnly placeholder="사무실 주소" className="flex-1 p-2 border border-gray-200 rounded-md outline-none bg-gray-50 text-sm" />
+                        <button onClick={() => openPostcode('broker')} className="bg-gray-800 text-white text-xs px-3 rounded-md">검색</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <input type="text" value={officePhone} onChange={(e) => setOfficePhone(e.target.value)} placeholder="사무실 전화" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                        <input type="text" value={cellPhone} onChange={(e) => setCellPhone(e.target.value)} placeholder="휴대폰" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                    </div>
+                </div>
+
+                            </div>
 
             <PaymentModal
                 isOpen={showPaymentModal}
