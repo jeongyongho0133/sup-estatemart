@@ -47,11 +47,23 @@ const ListingCard = ({ listing }) => {
         return result + '만원';
     };
 
-    const displayLocation = listing.address && listing.address.sido
-        ? (listing.address.exposure === 'full'
-            ? `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''} ${listing.address.detailAddress || ''} ${listing.propertySpecs?.buildingName ? `(${listing.propertySpecs.buildingName})` : ''}`.trim()
-            : `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''}`.trim())
-        : (listing.location ? (listing.location.split(' ').slice(0, 3).join(' ')) : '');
+    const displayLocation = (() => {
+        if (!listing.address || !listing.address.sido) {
+            return listing.location ? (listing.location.split(' ').slice(0, 3).join(' ')) : '';
+        }
+
+        const { sido, sigungu, eupmyeondong, ri, roadAddress, jibunAddress, detailAddress, exposure } = listing.address;
+        const base = `${sido} ${sigungu} ${eupmyeondong || ''} ${ri || ''}`.trim();
+
+        if (exposure !== 'full') return base;
+
+        const building = listing.propertySpecs?.buildingName ? ` (${listing.propertySpecs.buildingName})` : '';
+        const road = roadAddress ? `${roadAddress}${building}` : '';
+        const jibun = (jibunAddress || detailAddress) ? `${jibunAddress || detailAddress}${building}` : '';
+
+        // For list cards, keep it concise but prioritized
+        return road || jibun || base;
+    })();
 
     return (
         <div

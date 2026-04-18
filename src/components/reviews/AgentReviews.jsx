@@ -3,7 +3,7 @@ import { db } from '../../firebase';
 import { collection, query, where, orderBy, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 
-const AgentReviews = ({ agentId }) => {
+const AgentReviews = ({ agentId, listingId }) => {
     const { currentUser } = useAuth();
     const [reviews, setReviews] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -17,13 +17,21 @@ const AgentReviews = ({ agentId }) => {
         const fetchReviews = async () => {
             if (!agentId) return;
             try {
-                const q = query(
-                    collection(db, 'reviews'),
-                    where('agentId', '==', agentId),
-                    where('isHidden', '==', false),
-                    // Firestore requires an index if ordering by a different field than the where clause,
-                    // so we'll fetch then sort in memory for simplicity, or create an index later
-                );
+                let q;
+                if (listingId) {
+                    q = query(
+                        collection(db, 'reviews'),
+                        where('agentId', '==', agentId),
+                        where('listingId', '==', listingId),
+                        where('isHidden', '==', false),
+                    );
+                } else {
+                    q = query(
+                        collection(db, 'reviews'),
+                        where('agentId', '==', agentId),
+                        where('isHidden', '==', false),
+                    );
+                }
 
                 const snapshot = await getDocs(q);
                 const fetchedReviews = snapshot.docs.map(doc => ({
@@ -49,7 +57,7 @@ const AgentReviews = ({ agentId }) => {
         };
 
         fetchReviews();
-    }, [agentId]);
+    }, [agentId, listingId]);
 
     const handleReplySubmit = async (reviewId) => {
         if (!replyContent.trim()) return;

@@ -54,6 +54,9 @@ const ChatRoom = () => {
             });
             setMessages(msgs);
             scrollToBottom();
+        }, (err) => {
+            console.error("Firestore messages subscription error:", err);
+            // Optionally set an error state here as well
         });
 
         return () => unsubscribe();

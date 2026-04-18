@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
@@ -43,6 +43,8 @@ const ListingWrite = () => {
     const [managementFee, setManagementFee] = useState(''); // 관리비
 
     const [supplyArea, setSupplyArea] = useState(''); // 공급면적
+    const [landArea, setLandArea] = useState(''); // 토지면적
+    const [totalFloorArea, setTotalFloorArea] = useState(''); // 건축연면적
     const [exclusiveArea, setExclusiveArea] = useState(''); // 전용면적
     const [floor, setFloor] = useState(''); // 층
     const [totalFloors, setTotalFloors] = useState(''); // 전체층
@@ -59,6 +61,16 @@ const ListingWrite = () => {
     const [parkingCapacity, setParkingCapacity] = useState(''); // 주차대수
     const [direction, setDirection] = useState('남향'); // 방향
 
+    const otherTextareaRef = useRef(null);
+
+    // Auto-resize for 'Other' textarea on load
+    useEffect(() => {
+        if (otherTextareaRef.current && brokerageTargetOther) {
+            otherTextareaRef.current.style.height = 'auto';
+            otherTextareaRef.current.style.height = otherTextareaRef.current.scrollHeight + 'px';
+        }
+    }, [brokerageTargetOther]);
+
     const [officePhone, setOfficePhone] = useState('');
     const [cellPhone, setCellPhone] = useState('');
     const [registrationNumber, setRegistrationNumber] = useState('');
@@ -69,7 +81,9 @@ const ListingWrite = () => {
     const [sido, setSido] = useState('');
     const [sigungu, setSigungu] = useState('');
     const [eupmyeondong, setEupmyeondong] = useState('');
-    const [detailAddress, setDetailAddress] = useState(''); // Road name or Lot number
+    const [ri, setRi] = useState('');
+    const [roadAddress, setRoadAddress] = useState(''); // 도로명주소
+    const [jibunAddress, setJibunAddress] = useState(''); // 지번주소
     const [addressExposure, setAddressExposure] = useState('full'); // full, dong
     const [coordinates, setCoordinates] = useState(null); // { lat, lng }
     const [isAddressVerified, setIsAddressVerified] = useState(false);
@@ -131,6 +145,8 @@ const ListingWrite = () => {
 
                     if (data.propertySpecs) {
                         setSupplyArea(data.propertySpecs.supplyArea || '');
+                        setLandArea(data.propertySpecs.landArea || '');
+                        setTotalFloorArea(data.propertySpecs.totalFloorArea || '');
                         setExclusiveArea(data.propertySpecs.exclusiveArea || '');
                         setFloor(data.propertySpecs.floor || '');
                         setTotalFloors(data.propertySpecs.totalFloors || '');
@@ -160,7 +176,8 @@ const ListingWrite = () => {
                         setSido(data.address.sido || '');
                         setSigungu(data.address.sigungu || '');
                         setEupmyeondong(data.address.eupmyeondong || '');
-                        setDetailAddress(data.address.detailAddress || '');
+                        setRoadAddress(data.address.roadAddress || '');
+                        setJibunAddress(data.address.jibunAddress || data.address.detailAddress || '');
                         setAddressExposure(data.address.exposure || 'full');
                     }
 
@@ -249,7 +266,7 @@ const ListingWrite = () => {
     const handleImageChange = (e) => {
         if (e.target.files) {
             let files = Array.from(e.target.files);
-            
+
             if (images.length + files.length > 10) {
                 alert("이미지는 최대 10장까지만 업로드 가능합니다.");
                 files = files.slice(0, 10 - images.length);
@@ -286,8 +303,10 @@ const ListingWrite = () => {
                     setSido(data.sido);
                     setSigungu(data.sigungu);
                     setEupmyeondong(data.bname);
+                    setRoadAddress(data.roadAddress || '');
+                    setJibunAddress(data.jibunAddress || data.autoJibunAddress || '');
                     if (data.buildingName) {
-                        setDetailAddress(data.buildingName);
+                        setBuildingName(data.buildingName);
                     }
                     if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
                         const geocoder = new window.kakao.maps.services.Geocoder();
@@ -328,8 +347,16 @@ const ListingWrite = () => {
 
     const dongList = React.useMemo(() => {
         if (!sido || !sigungu || !KOREA_ADDRESS_DATA[sido] || !KOREA_ADDRESS_DATA[sido][sigungu]) return [];
-        return KOREA_ADDRESS_DATA[sido][sigungu];
+        const data = KOREA_ADDRESS_DATA[sido][sigungu];
+        return Array.isArray(data) ? data : Object.keys(data);
     }, [sido, sigungu]);
+
+    const riList = React.useMemo(() => {
+        if (!sido || !sigungu || !eupmyeondong || !KOREA_ADDRESS_DATA[sido] || !KOREA_ADDRESS_DATA[sido][sigungu]) return [];
+        const data = KOREA_ADDRESS_DATA[sido][sigungu];
+        if (Array.isArray(data)) return [];
+        return data[eupmyeondong] || [];
+    }, [sido, sigungu, eupmyeondong]);
 
     const handleSidoChange = (e) => {
         setSido(e.target.value);
@@ -340,13 +367,19 @@ const ListingWrite = () => {
     const handleSigunguChange = (e) => {
         setSigungu(e.target.value);
         setEupmyeondong('');
+        setRi('');
+    };
+
+    const handleEupmyeondongChange = (e) => {
+        setEupmyeondong(e.target.value);
+        setRi('');
     };
 
     useEffect(() => {
         if (sido && sigungu && eupmyeondong) {
             const finalDong = eupmyeondong === 'manual' ? '' : eupmyeondong;
             if (!finalDong) return;
-            const queryAddr = `${sido} ${sigungu} ${finalDong} ${detailAddress}`;
+            const queryAddr = `${sido} ${sigungu} ${finalDong} ${ri || ''} ${roadAddress || jibunAddress || ''}`.trim();
             if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
                 const geocoder = new window.kakao.maps.services.Geocoder();
                 geocoder.addressSearch(queryAddr, function (result, status) {
@@ -356,7 +389,7 @@ const ListingWrite = () => {
                 });
             }
         }
-    }, [sido, sigungu, eupmyeondong, detailAddress]);
+    }, [sido, sigungu, eupmyeondong, ri, roadAddress, jibunAddress]);
 
     const SIDO_LIST = getSidoList();
 
@@ -378,7 +411,7 @@ const ListingWrite = () => {
             const generateDescription = httpsCallable(functions, 'generateDescription');
 
             const listingData = {
-                location: `${sido} ${sigungu} ${eupmyeondong} ${detailAddress}`.trim(),
+                location: `${sido} ${sigungu} ${eupmyeondong} ${ri || ''} ${roadAddress || jibunAddress || ''}`.trim(),
                 price: transactionType === '월세' ? `보증금 ${deposit}/월세 ${monthlyRent}` : `${price}만원`,
                 area: `전용 ${exclusiveArea}㎡ / 공급 ${supplyArea}㎡`,
                 features: [], // TODO: Add specific features checkboxes later
@@ -482,13 +515,13 @@ const ListingWrite = () => {
                 propertyType,
                 transactionType,
                 propertySpecs: cleanPayload({
-                    supplyArea, exclusiveArea, floor, totalFloors, buildingName, ho, roomCount, bathroomCount, moveInDate, approvalDate, approvalDateType, moveInType, brokerageTargetTypes, brokerageTargetOther, parkingCapacity, direction
+                    supplyArea, landArea, totalFloorArea, exclusiveArea, floor, totalFloors, buildingName, ho, roomCount, bathroomCount, moveInDate, approvalDate, approvalDateType, moveInType, brokerageTargetTypes, brokerageTargetOther, parkingCapacity, direction
                 }),
                 brokerInfo: cleanPayload({
                     officePhone, cellPhone, registrationNumber, officeAddress, officeName
                 }),
-                location: `${sido} ${sigungu} ${eupmyeondong} ${detailAddress}`.trim(),
-                address: cleanPayload({ sido, sigungu, eupmyeondong, detailAddress, exposure: addressExposure }),
+                location: `${sido} ${sigungu} ${eupmyeondong} ${ri || ''} ${roadAddress || jibunAddress || ''}`.trim(),
+                address: cleanPayload({ sido, sigungu, eupmyeondong, ri, roadAddress, jibunAddress, exposure: addressExposure }),
                 coordinates: coordinates ? { lat: Number(coordinates.lat), lng: Number(coordinates.lng) } : null,
                 description: description || "",
                 manualDescription: manualDescription || "",
@@ -629,7 +662,7 @@ const ListingWrite = () => {
                 </div>
 
                 <div className="space-y-3">
-                    <label className="font-bold text-sm">위치</label>
+                    <label className="font-bold text-sm">부동산 토지 주소</label>
                     <div className="space-y-2">
                         <select value={sido} onChange={handleSidoChange} className="w-full p-2 border border-gray-200 rounded-md outline-none bg-white text-sm">
                             <option value="">시/도 선택</option>
@@ -645,7 +678,7 @@ const ListingWrite = () => {
                                 <input type="text" value={sigungu} onChange={(e) => setSigungu(e.target.value)} placeholder="시/군/구" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
                             )}
                             {dongList.length > 0 ? (
-                                <select value={eupmyeondong} onChange={(e) => setEupmyeondong(e.target.value)} className="w-full p-2 border border-gray-200 rounded-md outline-none bg-white text-sm">
+                                <select value={eupmyeondong} onChange={handleEupmyeondongChange} className="w-full p-2 border border-gray-200 rounded-md outline-none bg-white text-sm">
                                     <option value="">읍/면/동 선택</option>
                                     {dongList.map(d => <option key={d} value={d}>{d}</option>)}
                                 </select>
@@ -653,23 +686,52 @@ const ListingWrite = () => {
                                 <input type="text" value={eupmyeondong} onChange={(e) => setEupmyeondong(e.target.value)} placeholder="읍/면/동" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
                             )}
                         </div>
-                        <input type="text" value={detailAddress} onChange={(e) => setDetailAddress(e.target.value)} placeholder="상세주소" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
+
+                        {riList.length > 0 && (
+                            <select value={ri} onChange={(e) => setRi(e.target.value)} className="w-full p-2 border border-gray-200 rounded-md outline-none bg-white text-sm">
+                                <option value="">리 선택</option>
+                                {riList.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                        )}
+
+                        {/* Jibun Address */}
+                        <input type="text" value={jibunAddress} onChange={(e) => setJibunAddress(e.target.value)} placeholder="지번주소 (필수)" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
+
+                        {/* Dong/Ho */}
                         <div className="grid grid-cols-2 gap-2">
-                            <input type="text" value={buildingName} onChange={(e) => setBuildingName(e.target.value)} placeholder="동" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
-                            <input type="text" value={ho} onChange={(e) => setHo(e.target.value)} placeholder="호" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                            <input type="text" value={buildingName} onChange={(e) => setBuildingName(e.target.value)} placeholder="동 (입력)" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
+                            <input type="text" value={ho} onChange={(e) => setHo(e.target.value)} placeholder="호 (입력)" className="w-full p-2 border border-gray-200 rounded-md outline-none text-sm" />
                         </div>
-                        
+
+                        {/* Road Name Address with Search */}
+                        <div className="relative">
+                            <label className="font-bold text-sm">부동산 도로명주소 </label>
+                            <input
+                                type="text"
+                                value={roadAddress}
+                                onChange={(e) => setRoadAddress(e.target.value)}
+                                placeholder="도로명주소 (선택)"
+                                className="w-full p-2 pr-20 border border-gray-200 rounded-md outline-none text-sm bg-gray-50"
+                            />
+                            <button
+                                onClick={() => openPostcode()}
+                                className="absolute right-1 top-1 bottom-1 px-3 bg-gray-800 text-white text-[10px] rounded-md font-bold hover:bg-black transition-colors"
+                            >
+                                주소 검색
+                            </button>
+                        </div>
+
                         {/* Address Exposure Toggle */}
                         <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
                             <span className="text-xs font-bold text-gray-700">고객에게 노출될 주소 범위</span>
                             <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
-                                <button 
+                                <button
                                     onClick={() => setAddressExposure('full')}
                                     className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition ${addressExposure === 'full' ? 'bg-white shadow text-market-orange' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
-                                    상세주소 전체
+                                    상세주소 번지 노출
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => setAddressExposure('dong')}
                                     className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition ${addressExposure === 'dong' ? 'bg-white shadow text-market-orange' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
@@ -732,8 +794,8 @@ const ListingWrite = () => {
 
                 <div className="space-y-2">
                     <label className="text-xs text-gray-500 leading-relaxed block">
-                        사진이 없다면 기본 이미지를 선택하세요. <br/>
-                        <span className="font-bold text-gray-700">▶ 등록 조건:</span> 최소 1장 이상 등록 필수 (최대 10장) <br/>
+                        사진이 없다면 기본 이미지를 선택하세요. <br />
+                        <span className="font-bold text-gray-700">▶ 등록 조건:</span> 최소 1장 이상 등록 필수 (최대 10장) <br />
                         <span className="font-bold text-gray-700">▶ 지원 형식:</span> JPG, JPEG, PNG, WEBP
                     </label>
                     <div className="flex space-x-2">
@@ -750,7 +812,7 @@ const ListingWrite = () => {
                     <div className="grid grid-cols-2 gap-3">
                         <div className="col-span-2 space-y-2">
                             <label className="text-[10px] text-gray-500 font-bold">중개대상물 종류 (다중 선택 가능)</label>
-                            
+
                             <div className="text-[10px] text-gray-500 mt-2">건축물 용도</div>
                             <div className="grid grid-cols-3 gap-2">
                                 {TARGET_TYPES_BUILDING.map(opt => (
@@ -777,7 +839,7 @@ const ListingWrite = () => {
                                 ))}
                             </div>
 
-                            <div className="text-[10px] text-gray-500 mt-3 border-t pt-2">기타 (직접입력)</div>
+                            <div className="text-[10px] text-gray-500 mt-3 border-t pt-2">기타 추가 주소,번지 등 (직접입력)체크하고 입력</div>
                             <div className="flex items-center space-x-2">
                                 <label className="flex items-center space-x-1 cursor-pointer whitespace-nowrap">
                                     <input type="checkbox" checked={brokerageTargetTypes.includes('기타')} onChange={(e) => {
@@ -787,16 +849,36 @@ const ListingWrite = () => {
                                     <span className="text-xs text-gray-700">기타</span>
                                 </label>
                                 {brokerageTargetTypes.includes('기타') && (
-                                    <input type="text" value={brokerageTargetOther} onChange={e => setBrokerageTargetOther(e.target.value)} placeholder="직접 입력하세요" className="flex-1 p-2 border border-gray-200 rounded-lg outline-none text-xs" />
+                                    <textarea
+                                        ref={otherTextareaRef}
+                                        value={brokerageTargetOther}
+                                        onChange={e => {
+                                            setBrokerageTargetOther(e.target.value);
+                                            // Auto-resize logic
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = e.target.scrollHeight + 'px';
+                                        }}
+                                        placeholder="직접 입력하세요"
+                                        rows={1}
+                                        className="flex-1 p-2 border border-gray-200 rounded-lg outline-none text-xs resize-none overflow-hidden min-h-[36px]"
+                                    />
                                 )}
                             </div>
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">토지면적 (㎡)</label>
+                            <input type="number" value={landArea} onChange={(e) => setLandArea(e.target.value)} placeholder="ex) 330" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
+                        </div>
+                        <div className="col-span-1 space-y-1">
+                            <label className="text-[10px] text-gray-500 font-bold">건축연면적 (㎡)</label>
+                            <input type="number" value={totalFloorArea} onChange={(e) => setTotalFloorArea(e.target.value)} placeholder="ex) 250" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
                         </div>
                         <div className="col-span-1 space-y-1">
                             <label className="text-[10px] text-gray-500 font-bold">공급면적 (㎡)</label>
                             <input type="number" value={supplyArea} onChange={(e) => setSupplyArea(e.target.value)} placeholder="ex) 84" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
                         </div>
                         <div className="col-span-1 space-y-1">
-                            <label className="text-[10px] text-gray-500 font-bold">전용면적 (㎡)</label>
+                            <label className="text-[10px] text-gray-500 font-bold">전용면적(건축면적) (㎡)</label>
                             <input type="number" value={exclusiveArea} onChange={(e) => setExclusiveArea(e.target.value)} placeholder="ex) 59" className="w-full p-3 border border-gray-200 rounded-lg outline-none text-sm" />
                         </div>
                         <div className="col-span-1 space-y-1">
@@ -837,8 +919,8 @@ const ListingWrite = () => {
                             <label className="text-[10px] text-gray-500 font-bold">건축물 인허가 일자</label>
                             <div className="flex space-x-2 pb-1">
                                 {['사용승인일', '준공인가일', '사용검사일'].map(type => (
-                                    <button 
-                                        key={type} 
+                                    <button
+                                        key={type}
                                         onClick={() => setApprovalDateType(type)}
                                         className={`flex-1 py-1.5 border rounded-md text-xs transition ${approvalDateType === type ? 'bg-black text-white border-black' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}
                                     >
@@ -852,8 +934,8 @@ const ListingWrite = () => {
                             <label className="text-[10px] text-gray-500 font-bold">입주 가능일</label>
                             <div className="flex space-x-2">
                                 {['즉시입주', '협의가능', '날짜선택'].map(type => (
-                                    <button 
-                                        key={type} 
+                                    <button
+                                        key={type}
                                         onClick={() => {
                                             setMoveInType(type);
                                             if (type !== '날짜선택') setMoveInDate('');
@@ -891,7 +973,7 @@ const ListingWrite = () => {
                         <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="AI 버튼을 누르면 위쪽에 입력한 기본 데이터를 바탕으로 화려한 상세 설명글이 자동으로 만들어집니다." className="w-full h-60 p-4 border border-gray-200 rounded-lg outline-none resize-none text-sm leading-relaxed"></textarea>
                     </div>
                 </div>
-<div className="space-y-2 border-t pt-4">
+                <div className="space-y-2 border-t pt-4">
                     <label className="font-bold text-sm">중개사 정보</label>
                     <div className="grid grid-cols-2 gap-2">
                         <input type="text" value={officeName} onChange={(e) => setOfficeName(e.target.value)} placeholder="상호명" className="p-2 border border-gray-200 rounded-md outline-none text-sm" />
@@ -907,7 +989,7 @@ const ListingWrite = () => {
                     </div>
                 </div>
 
-                            </div>
+            </div>
 
             <PaymentModal
                 isOpen={showPaymentModal}

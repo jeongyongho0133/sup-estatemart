@@ -10,9 +10,13 @@ const ChatList = () => {
     const { currentUser } = useAuth();
     const [chats, setChats] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (!currentUser) return;
+
+        setLoading(true);
+        setError(null);
 
         const q = query(
             collection(db, 'chats'),
@@ -21,34 +25,42 @@ const ChatList = () => {
         );
 
         const unsubscribe = onSnapshot(q, async (snapshot) => {
-            const chatList = [];
+            try {
+                const chatList = [];
 
-            // Note: In a real app, we might need a more optimized way to fetch other user details
-            // For now, we fetch them individually which is okay for a few chats
-            for (const docSnapshot of snapshot.docs) {
-                const data = docSnapshot.data();
-                const otherUid = data.participants.find(uid => uid !== currentUser.uid);
+                for (const docSnapshot of snapshot.docs) {
+                    const data = docSnapshot.data();
+                    const otherUid = data.participants.find(uid => uid !== currentUser.uid);
 
-                let otherUserData = { displayName: '알 수 없음', photoURL: null };
-                if (otherUid) {
-                    try {
-                        const userDoc = await getDoc(doc(db, 'users', otherUid));
-                        if (userDoc.exists()) {
-                            otherUserData = userDoc.data();
+                    let otherUserData = { displayName: '알 수 없음', photoURL: null };
+                    if (otherUid) {
+                        try {
+                            const userDoc = await getDoc(doc(db, 'users', otherUid));
+                            if (userDoc.exists()) {
+                                otherUserData = userDoc.data();
+                            }
+                        } catch (e) {
+                            console.error('Error fetching user:', e);
                         }
-                    } catch (e) {
-                        console.error('Error fetching user:', e);
                     }
+
+                    chatList.push({
+                        id: docSnapshot.id,
+                        ...data,
+                        otherUser: otherUserData
+                    });
                 }
 
-                chatList.push({
-                    id: docSnapshot.id,
-                    ...data,
-                    otherUser: otherUserData
-                });
+                setChats(chatList);
+                setLoading(false);
+            } catch (err) {
+                console.error("Error processing chat snapshot:", err);
+                setError("채팅 목록을 불러오는 중 오류가 발생했습니다.");
+                setLoading(false);
             }
-
-            setChats(chatList);
+        }, (err) => {
+            console.error("Firestore onSnapshot error:", err);
+            setError(err.message || "채팅을 불러올 수 없습니다.");
             setLoading(false);
         });
 
@@ -66,6 +78,20 @@ const ChatList = () => {
             <div className="pb-20">
                 {loading ? (
                     <div className="text-center py-10 text-gray-400">로딩중...</div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+                        <div className="text-4xl mb-3 text-red-500">⚠</div>
+                        <p className="text-gray-600 font-medium">데이터를 불러오지 못했습니다.</p>
+                        <div className="mt-2 p-3 bg-red-50 text-red-700 text-xs rounded-lg break-all max-w-full font-mono">
+                            {error}
+                        </div>
+                        <button 
+                            onClick={() => window.location.reload()}
+                            className="mt-6 px-4 py-2 bg-market-orange text-white rounded-lg text-sm font-bold shadow-sm"
+                        >
+                            다시 시도
+                        </button>
+                    </div>
                 ) : chats.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                         <div className="text-4xl mb-3">💬</div>

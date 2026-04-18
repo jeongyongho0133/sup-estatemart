@@ -61,9 +61,23 @@ const AiChat = () => {
         return (
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-20 right-4 w-14 h-14 bg-market-orange text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 text-2xl"
+                className="fixed bottom-20 right-4 w-16 h-16 bg-market-orange text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 group"
             >
-                🤖
+                <div className="absolute inset-0 w-full h-full animate-spin-slow">
+                    <svg className="w-full h-full" viewBox="0 0 100 100">
+                        <path
+                            id="circlePath"
+                            d="M 50, 50 m -38, 0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0"
+                            fill="transparent"
+                        />
+                        <text className="text-[11px] font-black fill-white/90">
+                            <textPath xlinkHref="#circlePath" startOffset="0%">
+                                AI 상담사 • AI 상담사 • 
+                            </textPath>
+                        </text>
+                    </svg>
+                </div>
+                <span className="text-2xl relative z-10 group-hover:scale-110 transition-transform">🤖</span>
             </button>
         );
     }

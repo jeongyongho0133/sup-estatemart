@@ -282,11 +282,24 @@ const ListingDetail = () => {
     };
 
     // Build location string based on exposure
-    const locationStr = listing.address && listing.address.sido
-        ? (listing.address.exposure === 'full'
-            ? `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''} ${listing.address.detailAddress || ''} ${listing.propertySpecs?.buildingName ? `(${listing.propertySpecs.buildingName})` : ''}`.trim()
-            : `${listing.address.sido} ${listing.address.sigungu} ${listing.address.eupmyeondong || ''}`.trim())
-        : (listing.location ? (listing.location.split(' ').slice(0, 3).join(' ')) : '');
+    const locationStr = (() => {
+        if (!listing.address || !listing.address.sido) {
+            return listing.location ? (listing.location.split(' ').slice(0, 3).join(' ')) : '';
+        }
+
+        const { sido, sigungu, eupmyeondong, ri, roadAddress, jibunAddress, detailAddress, exposure } = listing.address;
+        const base = `${sido} ${sigungu} ${eupmyeondong || ''} ${ri || ''}`.trim();
+
+        if (exposure !== 'full') return base;
+
+        const building = listing.propertySpecs?.buildingName ? ` (${listing.propertySpecs.buildingName})` : '';
+        const road = roadAddress ? `${roadAddress}${building}` : '';
+        const jibun = (jibunAddress || detailAddress) ? `${jibunAddress || detailAddress}${building}` : '';
+
+        if (road && jibun) return `${road} [지번: ${jibun}]`;
+        if (jibun) return `${base} ${jibun}`;
+        return road || base;
+    })();
 
     // Get coordinates for map
     const mapLat = listing.coordinates?.lat || 37.498095;
@@ -384,6 +397,18 @@ const ListingDetail = () => {
                                             ? [...listing.propertySpecs.brokerageTargetTypes, listing.propertySpecs.brokerageTargetOther].filter(Boolean).join(', ')
                                             : listing.propertySpecs.brokerageTargetType}
                                     </span>
+                                </div>
+                            )}
+                            {listing.propertySpecs.landArea && (
+                                <div className="bg-gray-50 p-2 rounded col-span-1">
+                                    <span className="text-gray-500">토지면적: </span>
+                                    <span className="font-medium">{listing.propertySpecs.landArea}㎡</span>
+                                </div>
+                            )}
+                            {listing.propertySpecs.totalFloorArea && (
+                                <div className="bg-gray-50 p-2 rounded col-span-1">
+                                    <span className="text-gray-500">건축연면적: </span>
+                                    <span className="font-medium">{listing.propertySpecs.totalFloorArea}㎡</span>
                                 </div>
                             )}
                             {listing.propertySpecs.supplyArea && (
@@ -513,7 +538,7 @@ const ListingDetail = () => {
                             </button>
                         )}
                     </div>
-                    <AgentReviews agentId={listing.userId} />
+                    <AgentReviews agentId={listing.userId} listingId={id} />
                 </div>
 
                 {/* Similar Listings Section */}

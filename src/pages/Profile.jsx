@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, orderBy, getDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, setDoc, orderBy, getDoc, serverTimestamp, increment } from 'firebase/firestore';
 import AgentReviews from '../components/reviews/AgentReviews';
 
 const Profile = () => {
@@ -19,6 +19,18 @@ const Profile = () => {
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('profile'); // 'profile' or 'likes'
     const [uploadingDoc, setUploadingDoc] = useState(false);
+    
+    // Profile Edit States
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [editForm, setEditForm] = useState({
+        displayName: userData?.nickname || currentUser?.displayName || '',
+        phone: userData?.phone || '',
+        address: userData?.address || '',
+        photoURL: currentUser?.photoURL || ''
+    });
+    const [profileImageFile, setProfileImageFile] = useState(null);
+    const [profileImagePreview, setProfileImagePreview] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         if (!currentUser) return;
@@ -148,6 +160,73 @@ const Profile = () => {
         }
     };
 
+    const handleProfileImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setProfileImageFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setProfileImagePreview(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleAddressSearch = () => {
+        const script = document.createElement('script');
+        script.src = '//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+        script.onload = () => {
+            new window.daum.Postcode({
+                oncomplete: function (data) {
+                    setEditForm(prev => ({ ...prev, address: data.roadAddress || data.jibunAddress }));
+                }
+            }).open();
+        };
+        document.body.appendChild(script);
+    };
+
+    const handleSaveProfile = async () => {
+        if (!currentUser) return;
+        setIsSaving(true);
+        try {
+            let photoURL = editForm.photoURL;
+
+            // 1. Upload new profile picture if exists
+            if (profileImageFile) {
+                const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+                const storage = getStorage();
+                const imageRef = ref(storage, `profile_pictures/${currentUser.uid}/${Date.now()}_${profileImageFile.name}`);
+                await uploadBytes(imageRef, profileImageFile);
+                photoURL = await getDownloadURL(imageRef);
+            }
+
+            // 2. Update Firebase Auth Profile
+            const { updateProfile } = await import('firebase/auth');
+            await updateProfile(currentUser, {
+                displayName: editForm.displayName,
+                photoURL: photoURL
+            });
+
+            // 3. Update Firestore User Document (use setDoc for reliability)
+            await setDoc(doc(db, "users", currentUser.uid), {
+                nickname: editForm.displayName,
+                phone: editForm.phone,
+                address: editForm.address,
+                photoURL: photoURL,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            alert("프로필이 성공적으로 수정되었습니다.");
+            setIsSaving(false); // Reset before reload
+            window.location.reload();
+        } catch (error) {
+            console.error("Error saving profile:", error);
+            alert("프로필 수정에 실패했습니다.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleLogout = async () => {
         try {
             await logout();
@@ -226,62 +305,144 @@ const Profile = () => {
             <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
                 <div></div>
                 <div className="flex-1 text-center">마이페이지</div>
-                {currentUser && (
-                    <button
-                        onClick={handleLogout}
-                        className="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full hover:bg-gray-200 transition"
-                    >
-                        로그아웃
-                    </button>
-                )}
+                <div className="flex items-center space-x-2">
+                    {!isEditingProfile ? (
+                        <button
+                            onClick={() => setIsEditingProfile(true)}
+                            className="text-xs font-medium text-market-orange bg-orange-50 px-3 py-1.5 rounded-full hover:bg-orange-100 transition"
+                        >
+                            프로필 수정
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setIsEditingProfile(false)}
+                            className="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full hover:bg-gray-200 transition"
+                        >
+                            취소
+                        </button>
+                    )}
+                </div>
             </header>
 
             <div className="p-4">
-                {/* Profile Info */}
-                <div className="flex items-center space-x-4 mb-6 relative">
-                    <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden relative border border-gray-100 flex-shrink-0">
-                        {currentUser.photoURL ? (
-                            <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="w-full h-full flex items-center justify-center text-3xl pb-1 text-gray-400">👤</span>
-                        )}
-                        {verificationStatus === 'verified' && (
-                            <div className="absolute bottom-0 right-0 bg-blue-500 text-white text-[10px] px-1 rounded-tl-lg font-bold">
-                                ✓
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                            <div className="flex flex-col">
-                                <div className="font-bold text-lg leading-tight flex items-center space-x-2">
-                                    <span>{currentUser.displayName || '사용자'}</span>
-                                    {userData?.isPremium && (
-                                        <span className="text-[10px] px-1.5 py-0.5 bg-gradient-to-r from-orange-400 to-market-orange text-white rounded-md font-black shadow-sm">
-                                            PREMIUM
+                {/* Profile Info & Edit Form */}
+                <div className={`p-4 rounded-2xl bg-white border border-gray-100 shadow-sm mb-6 ${isEditingProfile ? 'ring-2 ring-market-orange/20' : ''}`}>
+                    <div className="flex items-center space-x-4 relative">
+                        {/* Profile Image with Upload Trigger */}
+                        <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden relative border border-gray-100 flex-shrink-0 group">
+                            {profileImagePreview || editForm.photoURL ? (
+                                <img src={profileImagePreview || editForm.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="w-full h-full flex items-center justify-center text-3xl pb-1 text-gray-400">👤</span>
+                            )}
+                            
+                            {isEditingProfile && (
+                                <label className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-white text-[10px] font-bold">변경</span>
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleProfileImageChange} />
+                                </label>
+                            )}
+                            
+                            {!isEditingProfile && verificationStatus === 'verified' && (
+                                <div className="absolute bottom-0 right-0 bg-blue-500 text-white text-[10px] px-1 rounded-tl-lg font-bold shadow-sm">
+                                    ✓
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex-1">
+                            {!isEditingProfile ? (
+                                <>
+                                    <div className="flex flex-col">
+                                        <div className="font-bold text-lg leading-tight flex items-center space-x-2">
+                                            <span>{currentUser.displayName || '사용자'}</span>
+                                            {userData?.isPremium && (
+                                                <span className="text-[10px] px-1.5 py-0.5 bg-gradient-to-r from-orange-400 to-market-orange text-white rounded-md font-black shadow-sm">
+                                                    PREMIUM
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1 flex items-center">
+                                            <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded mr-1.5 font-medium">ID</span>
+                                            {currentUser.email}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2 mt-2">
+                                        <span className={`text-[11px] font-bold px-2 py-1 rounded-md ${
+                                            role === 'admin' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                            role === 'broker' || role === 'agent' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 
+                                            'bg-gray-50 text-gray-600 border border-gray-100'
+                                        }`}>
+                                            {role === 'admin' ? '관리자' : (role === 'broker' || role === 'agent' ? '부동산 중개사' : '일반 회원')}
                                         </span>
-                                    )}
+                                        <span className="text-[11px] font-medium px-2 py-1 bg-green-50 text-green-700 border border-green-100 rounded-md flex items-center space-x-1">
+                                            <span>방문</span>
+                                            <span className="font-bold">{userData?.loginCount || 1}회</span>
+                                        </span>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-400 block mb-1">닉네임</label>
+                                        <input 
+                                            type="text" 
+                                            value={editForm.displayName} 
+                                            onChange={(e) => setEditForm(prev => ({ ...prev, displayName: e.target.value }))}
+                                            placeholder="닉네임 입력"
+                                            className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-market-orange outline-none"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">연락처</label>
+                                            <input 
+                                                type="text" 
+                                                value={editForm.phone} 
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                                                placeholder="010-0000-0000"
+                                                className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-market-orange outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">상태</label>
+                                            <div className="p-2 text-sm text-gray-400 bg-gray-100 rounded-lg">{role === 'user' ? '일반회원' : '중개사'}</div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1 flex items-center">
-                                    <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded mr-1.5 font-medium">ID</span>
-                                    {currentUser.email}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex items-center space-x-2 mt-2">
-                            <span className={`text-[11px] font-bold px-2 py-1 rounded-md ${
-                                role === 'admin' ? 'bg-red-50 text-red-600 border border-red-100' :
-                                role === 'broker' || role === 'agent' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 
-                                'bg-gray-50 text-gray-600 border border-gray-100'
-                            }`}>
-                                {role === 'admin' ? '관리자' : (role === 'broker' || role === 'agent' ? '부동산 중개사' : '일반 회원')}
-                            </span>
-                            <span className="text-[11px] font-medium px-2 py-1 bg-green-50 text-green-700 border border-green-100 rounded-md flex items-center space-x-1">
-                                <span>방문</span>
-                                <span className="font-bold">{userData?.loginCount || 1}회</span>
-                            </span>
+                            )}
                         </div>
                     </div>
+
+                    {isEditingProfile && (
+                        <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-400 block mb-1">주소</label>
+                                <div className="flex space-x-2">
+                                    <input 
+                                        type="text" 
+                                        value={editForm.address} 
+                                        readOnly
+                                        placeholder="주소 검색을 이용해주세요"
+                                        className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none"
+                                    />
+                                    <button 
+                                        onClick={handleAddressSearch}
+                                        className="px-4 py-2 bg-gray-800 text-white text-xs font-bold rounded-lg"
+                                    >
+                                        검색
+                                    </button>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={handleSaveProfile}
+                                disabled={isSaving}
+                                className={`w-full py-3 ${isSaving ? 'bg-gray-400' : 'bg-market-orange'} text-white font-bold rounded-xl shadow-lg transition transform active:scale-95`}
+                            >
+                                {isSaving ? '저장 중...' : '프로필 정보 저장하기'}
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Membership Promotion (if not premium) */}
