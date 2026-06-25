@@ -4,9 +4,14 @@ import AiChat from '../common/AiChat';
 import { useAuth } from '../../contexts/AuthContext';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../../firebase';
+import { useCompare } from '../../contexts/CompareContext';
+import { useNavigate } from 'react-router-dom';
 
 const MobileLayout = ({ children, showNav = true }) => {
     const { currentUser } = useAuth();
+    const compareContext = useCompare();
+    const compareList = compareContext ? compareContext.compareList : [];
+    const navigate = useNavigate();
     const [sending, setSending] = useState(false);
 
     const handleResend = async () => {
@@ -63,6 +68,19 @@ const MobileLayout = ({ children, showNav = true }) => {
                 <main className={`flex-1 overflow-x-hidden ${showNav ? 'pb-20' : 'pb-0'}`}>
                     {children}
                 </main>
+
+                {compareList?.length > 0 && (
+                    <div className={`absolute right-4 z-40 transition-all ${showNav ? 'bottom-20' : 'bottom-24'}`}>
+                        <button 
+                            onClick={() => navigate('/compare')}
+                            className="bg-gray-900 text-white shadow-lg rounded-full px-4 py-3 flex items-center space-x-2 border-2 border-market-orange hover:bg-gray-800 transition transform hover:scale-105"
+                        >
+                            <span className="text-xl">⚖️</span>
+                            <span className="font-bold text-sm">비교함 ({compareList.length}/3)</span>
+                        </button>
+                    </div>
+                )}
+
                 <AiChat />
                 {showNav && <BottomNav />}
             </div>

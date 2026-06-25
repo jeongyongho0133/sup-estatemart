@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../../contexts/AuthContext';
+import { auth } from '../../firebase';
+import { updateEmail, verifyBeforeUpdateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 
 const SettingsTab = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const { currentUser } = useAuth();
+    
+    // Admin Security Info
+    const [adminAuth, setAdminAuth] = useState({
+        currentPassword: '',
+        newEmail: currentUser?.email || '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [updatingAuth, setUpdatingAuth] = useState(false);
 
     // Default Settings
     const [settings, setSettings] = useState({
@@ -15,6 +28,7 @@ const SettingsTab = () => {
         phone: '02-1234-5678',
         email: 'contact@estatemartet.com',
         address: '서울시 강남구 테헤란로 123',
+        adminKakaoOpenChatUrl: 'https://open.kakao.com/o/svCp9uti', // Default Admin Kakao URL
 
         // Forbidden Keywords
         forbiddenKeywords: '', // stored as comma-separated string in UI, array in DB
@@ -90,6 +104,58 @@ const SettingsTab = () => {
             alert("설정 저장 중 오류가 발생했습니다.");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleUpdateAdminAccount = async (e) => {
+        e.preventDefault();
+        if (!adminAuth.currentPassword) {
+            alert("현재 비밀번호를 입력해주세요.");
+            return;
+        }
+        if (adminAuth.newPassword && adminAuth.newPassword !== adminAuth.confirmPassword) {
+            alert("새 비밀번호와 확인 비밀번호가 일치하지 않습니다.");
+            return;
+        }
+
+        if (!window.confirm("관리자 계정 정보를 변경하시겠습니까?\n변경 후에는 새로운 정보로 다시 로그인해야 할 수 있습니다.")) return;
+
+        setUpdatingAuth(true);
+        try {
+            const user = auth.currentUser;
+            // 1. Re-authenticate
+            const credential = EmailAuthProvider.credential(user.email, adminAuth.currentPassword);
+            await reauthenticateWithCredential(user, credential);
+
+            // 2. Update Email if changed
+            if (adminAuth.newEmail && adminAuth.newEmail !== user.email) {
+                try {
+                    await updateEmail(user, adminAuth.newEmail);
+                    // Also update in Firestore users collection
+                    await updateDoc(doc(db, "users", user.uid), { email: adminAuth.newEmail });
+                } catch (emailError) {
+                    if (emailError.code === 'auth/operation-not-allowed' || emailError.message.includes('verify')) {
+                        await verifyBeforeUpdateEmail(user, adminAuth.newEmail);
+                        alert("Firebase 보안 정책에 따라 새 이메일 주소로 인증 메일이 발송되었습니다.\n수신함에서 인증 링크를 클릭해야 이메일 변경이 최종 완료됩니다.");
+                    } else {
+                        throw emailError;
+                    }
+                }
+            }
+
+            // 3. Update Password if provided
+            if (adminAuth.newPassword) {
+                await updatePassword(user, adminAuth.newPassword);
+            }
+
+            alert("관리자 계정 정보가 성공적으로 변경되었습니다.");
+            setAdminAuth(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+        } catch (e) {
+            console.error("Admin Auth Update Error:", e);
+            if (e.code === 'auth/wrong-password') alert("현재 비밀번호가 올바르지 않습니다.");
+            else alert("정보 변경에 실패했습니다: " + e.message);
+        } finally {
+            setUpdatingAuth(false);
         }
     };
 
@@ -172,6 +238,18 @@ const SettingsTab = () => {
                             onChange={handleChange}
                             className="w-full p-2 border border-gray-200 rounded-lg text-sm"
                         />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                        <label className="text-xs font-bold text-gray-500">고객센터 카카오톡 오픈채팅 URL</label>
+                        <input
+                            type="url"
+                            name="adminKakaoOpenChatUrl"
+                            value={settings.adminKakaoOpenChatUrl || ''}
+                            onChange={handleChange}
+                            placeholder="https://open.kakao.com/o/..."
+                            className="w-full p-2 border border-gray-200 rounded-lg text-sm"
+                        />
+                        <p className="text-[10px] text-gray-400">이 링크는 메인 화면 하단의 '고객센터 문의(TALK)' 플로팅 버튼에 적용됩니다.</p>
                     </div>
                 </div>
             </div>
@@ -271,6 +349,61 @@ const SettingsTab = () => {
                     <p className="text-[10px] text-red-400 mt-1">* 점검 모드가 활성화되면 관리자(Admin)를 제외한 모든 사용자의 접근이 제한됩니다.</p>
                 </div>
             </div>
+            {/* Admin Security Settings Section - ONLY FOR MAIN ADMIN */}
+            {(currentUser.role === 'admin' || currentUser.email === 'grandcity@naver.com') && (
+                <div className="bg-gray-800 p-5 rounded-2xl border border-gray-700 shadow-xl mt-10">
+                    <h3 className="text-sm font-bold text-white mb-4 border-b border-gray-700 pb-2">🔒 관리자 보안 설정 (ID/PW 변경)</h3>
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-gray-400">현재 비밀번호 (확인용)</label>
+                                <input
+                                    type="password"
+                                    value={adminAuth.currentPassword}
+                                    onChange={(e) => setAdminAuth(prev => ({ ...prev, currentPassword: e.target.value }))}
+                                    className="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-sm text-white focus:border-market-orange outline-none"
+                                    placeholder="변경을 위해 입력이 필요합니다"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-gray-400">새 관리자 이메일 (ID)</label>
+                                <input
+                                    type="email"
+                                    value={adminAuth.newEmail}
+                                    onChange={(e) => setAdminAuth(prev => ({ ...prev, newEmail: e.target.value }))}
+                                    className="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-sm text-white focus:border-market-orange outline-none"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-gray-400">새 비밀번호</label>
+                                <input
+                                    type="password"
+                                    value={adminAuth.newPassword}
+                                    onChange={(e) => setAdminAuth(prev => ({ ...prev, newPassword: e.target.value }))}
+                                    className="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-sm text-white focus:border-market-orange outline-none"
+                                    placeholder="6자리 이상 (변경시에만 입력)"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-gray-400">새 비밀번호 확인</label>
+                                <input
+                                    type="password"
+                                    value={adminAuth.confirmPassword}
+                                    onChange={(e) => setAdminAuth(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                                    className="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-sm text-white focus:border-market-orange outline-none"
+                                />
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleUpdateAdminAccount}
+                            disabled={updatingAuth}
+                            className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-lg shadow-red-900/20 disabled:opacity-50"
+                        >
+                            {updatingAuth ? '보안 정보 업데이트 중...' : '관리자 보안 정보 변경 실행'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

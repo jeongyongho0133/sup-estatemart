@@ -76,6 +76,7 @@ const ListingWrite = () => {
     const [registrationNumber, setRegistrationNumber] = useState('');
     const [officeAddress, setOfficeAddress] = useState('');
     const [officeName, setOfficeName] = useState('');
+    const [kakaoOpenChatUrl, setKakaoOpenChatUrl] = useState('');
 
     // Detailed Address State
     const [sido, setSido] = useState('');
@@ -122,7 +123,22 @@ const ListingWrite = () => {
 
     useEffect(() => {
         const fetchListingForEdit = async () => {
-            if (!id) return;
+            if (!id) {
+                // 새 매물 등록일 경우 중개사 정보 자동 채우기
+                if (userData && (userData.role === 'agent' || userData.role === 'broker' || userData.role === 'admin')) {
+                    if (userData.brokerInfo) {
+                        setOfficeName(userData.brokerInfo.officeName || '');
+                        setOfficePhone(userData.brokerInfo.officePhone || '');
+                        setRegistrationNumber(userData.brokerInfo.registrationNumber || '');
+                        setOfficeAddress(userData.brokerInfo.officeAddress || '');
+                        setKakaoOpenChatUrl(userData.brokerInfo.kakaoOpenChatUrl || '');
+                    }
+                    if (userData.phone) {
+                        setCellPhone(userData.phone);
+                    }
+                }
+                return;
+            }
             try {
                 const docSnap = await getDoc(doc(db, "listings", id));
                 if (docSnap.exists()) {
@@ -170,6 +186,7 @@ const ListingWrite = () => {
                         setRegistrationNumber(data.brokerInfo.registrationNumber || '');
                         setOfficeAddress(data.brokerInfo.officeAddress || '');
                         setOfficeName(data.brokerInfo.officeName || '');
+                        setKakaoOpenChatUrl(data.brokerInfo.kakaoOpenChatUrl || '');
                     }
 
                     if (data.address) {
@@ -433,6 +450,15 @@ const ListingWrite = () => {
     };
 
     // ... (helper functions)
+    // Generate numeric listing ID (YYYYMMDD + 4 random digits)
+    const generateNumericId = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const random = Math.floor(1000 + Math.random() * 9000);
+        return `${year}${month}${day}${random}`;
+    };
 
     const handleSubmit = () => {
         if (isSubmitting) return;
@@ -505,8 +531,13 @@ const ListingWrite = () => {
             };
 
             const newDocRef = id ? doc(db, "listings", id) : doc(collection(db, "listings"));
+            
+            // Generate registration number only for new listings
+            const listingRegNumber = id ? undefined : generateNumericId();
+
             const payload = cleanPayload({
                 id: newDocRef.id,
+                listingRegNumber,
                 title,
                 price: price || '',
                 deposit: deposit || '',
@@ -518,7 +549,7 @@ const ListingWrite = () => {
                     supplyArea, landArea, totalFloorArea, exclusiveArea, floor, totalFloors, buildingName, ho, roomCount, bathroomCount, moveInDate, approvalDate, approvalDateType, moveInType, brokerageTargetTypes, brokerageTargetOther, parkingCapacity, direction
                 }),
                 brokerInfo: cleanPayload({
-                    officePhone, cellPhone, registrationNumber, officeAddress, officeName
+                    officePhone, cellPhone, registrationNumber, officeAddress, officeName, kakaoOpenChatUrl
                 }),
                 location: `${sido} ${sigungu} ${eupmyeondong} ${ri || ''} ${roadAddress || jibunAddress || ''}`.trim(),
                 address: cleanPayload({ sido, sigungu, eupmyeondong, ri, roadAddress, jibunAddress, exposure: addressExposure }),
@@ -989,6 +1020,19 @@ const ListingWrite = () => {
                     </div>
                 </div>
 
+                <div className="mt-10 mb-10 pt-6 border-t border-gray-100">
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-95 ${isSubmitting ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-market-orange text-white hover:bg-orange-600'}`}
+                    >
+                        {isSubmitting ? '저장 중...' : id ? '수정 완료하기' : '매물 등록하기'}
+                    </button>
+                    <p className="text-center text-xs text-gray-400 mt-4 leading-relaxed">
+                        허위 매물 등록 시 서비스 이용이 제한될 수 있습니다.<br />
+                        입력하신 정보가 정확한지 다시 한번 확인해 주세요.
+                    </p>
+                </div>
             </div>
 
             <PaymentModal

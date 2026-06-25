@@ -2,9 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 import KakaoMap from '../components/common/KakaoMap';
+import NaverMap from '../components/common/NaverMap';
+import GoogleMap from '../components/common/GoogleMap';
+import KakaoRoadview from '../components/common/KakaoRoadview';
+import RealEstateCalculator from '../components/common/RealEstateCalculator';
 import ReviewWrite from '../components/reviews/ReviewWrite';
 import AgentReviews from '../components/reviews/AgentReviews';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompare } from '../contexts/CompareContext';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, addDoc, getDocs, increment, updateDoc } from 'firebase/firestore';
 
@@ -12,11 +17,14 @@ const ListingDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { currentUser } = useAuth();
+    const { addToCompare, removeFromCompare, isCompared } = useCompare();
     const [listing, setListing] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isLiked, setIsLiked] = useState(false);
     const [seller, setSeller] = useState(null);
     const [similarListings, setSimilarListings] = useState([]);
+    const [mapProvider, setMapProvider] = useState('kakao');
+    const [mapCoords, setMapCoords] = useState({ lat: 37.498095, lng: 127.027610 });
 
     useEffect(() => {
         const fetchListing = async () => {
@@ -117,6 +125,26 @@ const ListingDetail = () => {
         checkLikeStatus();
         updateViewCount();
     }, [id, navigate, currentUser]);
+
+    // Handle dynamic geocoding if coordinates are missing
+    useEffect(() => {
+        if (!listing || !listing.location) return;
+
+        if (listing.coordinates?.lat && listing.coordinates?.lng) {
+            setMapCoords({ lat: Number(listing.coordinates.lat), lng: Number(listing.coordinates.lng) });
+            return;
+        }
+
+        // If coordinates missing, geocode the address
+        if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+            const geocoder = new window.kakao.maps.services.Geocoder();
+            geocoder.addressSearch(listing.location, (result, status) => {
+                if (status === window.kakao.maps.services.Status.OK) {
+                    setMapCoords({ lat: Number(result[0].y), lng: Number(result[0].x) });
+                }
+            });
+        }
+    }, [listing]);
 
     const handleLike = async () => {
         if (!currentUser) {
@@ -261,6 +289,27 @@ const ListingDetail = () => {
         }
     };
 
+    const handleCopyLink = () => {
+        const url = window.location.href;
+        navigator.clipboard.writeText(url).then(() => {
+            alert("매물 링크가 클립보드에 복사되었습니다. 🔗");
+        }).catch(err => {
+            console.error('Link copy failed:', err);
+            // Fallback for older browsers or insecure contexts
+            const textArea = document.createElement("textarea");
+            textArea.value = url;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                alert("매물 링크가 클립보드에 복사되었습니다. 🔗");
+            } catch (e) {
+                alert("링크 복사에 실패했습니다.");
+            }
+            document.body.removeChild(textArea);
+        });
+    };
+
     if (loading) {
         return (
             <MobileLayout showNav={false}>
@@ -273,12 +322,17 @@ const ListingDetail = () => {
 
     if (!listing) return null;
 
+    const formatNumber = (num) => {
+        if (!num) return '0';
+        return Number(num).toLocaleString();
+    };
+
     // Build display price
     const displayPrice = () => {
         if (listing.transactionType === '월세') {
-            return `보증금 ${listing.deposit || '0'}만 / 월세 ${listing.monthlyRent || '0'}만`;
+            return `보증금 ${formatNumber(listing.deposit)}만 / 월세 ${formatNumber(listing.monthlyRent)}만`;
         }
-        return `${listing.price || '0'}만원`;
+        return `${formatNumber(listing.price)}만원`;
     };
 
     // Build location string based on exposure
@@ -302,8 +356,8 @@ const ListingDetail = () => {
     })();
 
     // Get coordinates for map
-    const mapLat = listing.coordinates?.lat || 37.498095;
-    const mapLng = listing.coordinates?.lng || 127.027610;
+    const mapLat = mapCoords.lat;
+    const mapLng = mapCoords.lng;
 
     // Get image
     const imageUrl = listing.imageUrl || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80';
@@ -315,7 +369,7 @@ const ListingDetail = () => {
                 <button onClick={() => navigate(-1)} className="text-white text-2xl">←</button>
                 <div className="flex space-x-4 text-white">
                     <button onClick={() => navigate('/')} className="text-xl p-1">🏠</button>
-                    <button>🔗</button>
+                    <button onClick={handleCopyLink} className="text-xl p-1">🔗</button>
                     <button onClick={() => setShowReportModal(true)} className="text-sm border border-white/50 px-2 py-0.5 rounded-md hover:bg-white/10 transition">신고</button>
                 </div>
             </header>
@@ -374,13 +428,17 @@ const ListingDetail = () => {
 
                 {/* Title & Price */}
                 <h1 className="text-xl font-bold mb-1">{listing.title}</h1>
-                <p className="text-sm text-gray-500 mb-4">{locationStr}</p>
+                <div className="flex items-center space-x-2 text-[10px] text-gray-400 mb-2">
+                    <span>매물번호: {listing.listingRegNumber || '발급 대기'}</span>
+                    <span>•</span>
+                    <span>등록일: {listing.createdAt ? new Date(listing.createdAt.seconds * 1000).toLocaleDateString() : '-'}</span>
+                </div>
                 <div className="text-2xl font-bold text-market-orange mb-6">{displayPrice()}</div>
 
                 {/* Management Fee */}
                 {listing.managementFee && (
                     <div className="text-sm text-gray-500 mb-4 -mt-4">
-                        관리비: {listing.managementFee}만원
+                        관리비: {formatNumber(listing.managementFee)}만원
                     </div>
                 )}
 
@@ -393,7 +451,7 @@ const ListingDetail = () => {
                                 <div className="bg-gray-50 p-2 rounded col-span-2">
                                     <span className="text-gray-500">중개대상물 종류: </span>
                                     <span className="font-medium">
-                                        {listing.propertySpecs.brokerageTargetTypes?.length > 0 
+                                        {listing.propertySpecs.brokerageTargetTypes?.length > 0
                                             ? [...listing.propertySpecs.brokerageTargetTypes, listing.propertySpecs.brokerageTargetOther].filter(Boolean).join(', ')
                                             : listing.propertySpecs.brokerageTargetType}
                                     </span>
@@ -492,38 +550,123 @@ const ListingDetail = () => {
                     </div>
                 )}
 
+                {/* Real Estate Calculator */}
+                <div className="mb-6">
+                    <h3 className="font-bold text-sm mb-1">부동산 계산기</h3>
+                    <p className="text-[10px] text-gray-400">현재 매물 가격 기준으로 예상 비용을 계산해 보세요.</p>
+                    <RealEstateCalculator listing={listing} />
+                </div>
+
                 {/* Map Section */}
                 <div className="mb-6">
-                    <h3 className="font-bold text-sm mb-3">위치 정보</h3>
-                    <div className="w-full h-48 rounded-lg overflow-hidden border border-gray-100">
-                        <KakaoMap lat={mapLat} lng={mapLng} />
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-bold text-sm">위치 정보</h3>
+                        <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                            <button
+                                onClick={() => setMapProvider('kakao')}
+                                className={`text-[10px] px-2 py-1 rounded transition ${mapProvider === 'kakao' ? 'bg-white shadow-sm text-market-orange font-bold' : 'text-gray-400'}`}
+                            >
+                                카카오
+                            </button>
+                            <button
+                                onClick={() => setMapProvider('naver')}
+                                className={`text-[10px] px-2 py-1 rounded transition ${mapProvider === 'naver' ? 'bg-white shadow-sm text-market-orange font-bold' : 'text-gray-400'}`}
+                            >
+                                네이버
+                            </button>
+                            <button
+                                onClick={() => setMapProvider('google')}
+                                className={`text-[10px] px-2 py-1 rounded transition ${mapProvider === 'google' ? 'bg-white shadow-sm text-market-orange font-bold' : 'text-gray-400'}`}
+                            >
+                                구글
+                            </button>
+                            <button
+                                onClick={() => setMapProvider('roadview')}
+                                className={`text-[10px] px-2 py-1 rounded transition ${mapProvider === 'roadview' ? 'bg-white shadow-sm text-market-orange font-bold' : 'text-gray-400'}`}
+                            >
+                                로드뷰
+                            </button>
+                        </div>
+                    </div>
+                    <div className="w-full h-48 rounded-lg overflow-hidden border border-gray-100 relative">
+                        {mapProvider === 'kakao' && <KakaoMap lat={mapLat} lng={mapLng} />}
+                        {mapProvider === 'naver' && <NaverMap lat={mapLat} lng={mapLng} />}
+                        {mapProvider === 'google' && <GoogleMap lat={mapLat} lng={mapLng} />}
+                        {mapProvider === 'roadview' && <KakaoRoadview lat={mapLat} lng={mapLng} />}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{locationStr}</p>
                 </div>
 
                 {/* Broker Info */}
-                {listing.brokerInfo && (
-                    <div className="mb-6">
-                        <h3 className="font-bold text-sm mb-3">중개사 정보</h3>
-                        <div className="bg-gray-50 p-3 rounded text-sm space-y-1">
-                            {listing.brokerInfo.officeName && (
-                                <div><span className="text-gray-500">상호: </span>{listing.brokerInfo.officeName}</div>
-                            )}
-                            {listing.brokerInfo.registrationNumber && (
-                                <div><span className="text-gray-500">등록번호: </span>{listing.brokerInfo.registrationNumber}</div>
-                            )}
-                            {listing.brokerInfo.officePhone && (
-                                <div><span className="text-gray-500">사무실: </span>{listing.brokerInfo.officePhone}</div>
-                            )}
-                            {listing.brokerInfo.cellPhone && (
-                                <div><span className="text-gray-500">휴대폰: </span>{listing.brokerInfo.cellPhone}</div>
-                            )}
-                            {listing.brokerInfo.officeAddress && (
-                                <div><span className="text-gray-500">주소: </span>{listing.brokerInfo.officeAddress}</div>
-                            )}
-                        </div>
+                <div className="mb-6">
+                    <h3 className="font-bold text-sm mb-3">중개사 정보</h3>
+                    <div className="bg-gray-50 p-4 rounded-xl text-sm space-y-3 border border-gray-100 shadow-sm">
+                        {/* Define defaults as requested */}
+                        {(() => {
+                            const officeName = listing.brokerInfo?.officeName || '연호 공인중개사';
+                            const regNum = listing.brokerInfo?.registrationNumber || '45111-2018-00069';
+                            const officePhone = listing.brokerInfo?.officePhone || '063-273-0133';
+                            const cellPhone = listing.brokerInfo?.cellPhone || '010-7576-1500';
+                            const address = listing.brokerInfo?.officeAddress || '전북특별자치도 전주시 완산구 장승배기로 132';
+
+                            return (
+                                <>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex"><span className="text-gray-500 w-16">상호:</span><span className="font-bold text-gray-900">{officeName}</span></div>
+                                            {listing.userId && (
+                                                <button
+                                                    onClick={() => navigate(`/agent/${listing.userId}`)}
+                                                    className="text-xs bg-white border border-gray-200 text-gray-700 px-2.5 py-1 rounded-md hover:bg-gray-50 font-bold transition shadow-sm flex items-center space-x-1"
+                                                >
+                                                    <span>중개 매물 더보기</span>
+                                                    <span className="text-[10px]">〉</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="flex"><span className="text-gray-500 w-16">등록번호:</span><span>{regNum}</span></div>
+                                        <div className="flex items-center">
+                                            <span className="text-gray-500 w-16">사무실:</span>
+                                            <a href={`tel:${officePhone.replace(/[^0-9]/g, '')}`} className="text-blue-600 font-bold hover:underline flex items-center">
+                                                📞 {officePhone}
+                                            </a>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <span className="text-gray-500 w-16">휴대폰:</span>
+                                            <a href={`tel:${cellPhone.replace(/[^0-9]/g, '')}`} className="text-blue-600 font-bold hover:underline flex items-center">
+                                                📱 {cellPhone}
+                                            </a>
+                                        </div>
+                                        <div className="flex items-start">
+                                            <span className="text-gray-500 w-16">주소:</span>
+                                            <a href={`https://map.kakao.com/link/search/${encodeURIComponent(address)}`} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline flex-1 flex items-start">
+                                                🗺️ {address}
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-gray-200">
+                                        <a href={`sms:${cellPhone.replace(/[^0-9]/g, '')}?body=${encodeURIComponent(`[${officeName}] 매물번호 [${listing.listingRegNumber || '발급 대기'}] "${listing.title}" 문의합니다.`)}`} className="flex items-center justify-center space-x-2 py-2.5 bg-gray-800 text-white rounded-lg font-bold hover:bg-black transition shadow-sm">
+                                            <span>💬</span>
+                                            <span>물건 문자 보내기</span>
+                                        </a>
+                                        <button onClick={() => {
+                                            if (listing.brokerInfo?.kakaoOpenChatUrl) {
+                                                window.open(listing.brokerInfo.kakaoOpenChatUrl, '_blank');
+                                            } else {
+                                                alert("등록된 카카오톡 오픈채팅 링크가 없습니다.");
+                                            }
+                                        }} className="flex items-center justify-center space-x-2 py-2.5 bg-[#FEE500] text-[#000000] rounded-lg font-bold hover:bg-[#F4DC00] transition shadow-sm">
+                                            <span className="font-black">TALK</span>
+                                            <span>카카오톡 물건문의</span>
+                                        </button>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
-                )}
+                </div>
 
                 {/* Agent Reviews Section */}
                 <div className="mb-6 border-t pt-6">
@@ -548,13 +691,13 @@ const ListingDetail = () => {
                         <div className="flex space-x-3 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4">
                             {similarListings.map(sim => {
                                 const simLoc = sim.address?.sigungu ? `${sim.address.sido} ${sim.address.sigungu}` : (sim.location || '지역 정보 없음');
-                                const simPrice = sim.transactionType === '월세' 
-                                    ? `보증금 ${sim.deposit || 0} / 월 ${sim.monthlyRent || 0}` 
-                                    : `${sim.price || 0}만원`;
+                                const simPrice = sim.transactionType === '월세'
+                                    ? `보증금 ${formatNumber(sim.deposit)} / 월 ${formatNumber(sim.monthlyRent)}`
+                                    : `${formatNumber(sim.price)}만원`;
 
                                 return (
-                                    <div 
-                                        key={sim.id} 
+                                    <div
+                                        key={sim.id}
                                         onClick={() => navigate(`/listing/${sim.id}`)}
                                         className="w-40 flex-shrink-0 bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm cursor-pointer hover:shadow-md transition"
                                     >
@@ -578,15 +721,24 @@ const ListingDetail = () => {
             </div>
 
             {/* Sticky Bottom Actions */}
-            <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white p-4 pb-6 flex items-center justify-center">
-                <div className="w-full max-w-md flex space-x-3">
+            <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white p-4 pb-6 flex items-center justify-center z-50">
+                <div className="w-full max-w-md flex space-x-2">
                     <button
                         onClick={handleLike}
-                        className={`p-3 border rounded-lg transition ${isLiked ? 'text-red-500 border-red-200 bg-red-50' : 'text-gray-400 border-gray-200'}`}
+                        className={`px-3 py-3 border rounded-lg transition flex-shrink-0 ${isLiked ? 'text-red-500 border-red-200 bg-red-50' : 'text-gray-400 border-gray-200'}`}
                     >
                         {isLiked ? '♥' : '♡'}
                     </button>
-                    <div className="flex-1">
+                    <button
+                        onClick={() => {
+                            if (isCompared(id)) removeFromCompare(id);
+                            else addToCompare(listing);
+                        }}
+                        className={`px-2 py-3 border rounded-lg transition flex-shrink-0 text-xs font-bold ${isCompared(id) ? 'text-market-orange border-market-orange bg-orange-50' : 'text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                        {isCompared(id) ? '✓ 비교함' : '+ 매물비교'}
+                    </button>
+                    <div className="flex-1 flex flex-col justify-center pl-1 min-w-0">
                         <div className="text-xs font-bold text-gray-900">{displayPrice()}</div>
                         <div className="text-[10px] text-market-orange font-bold">{listing.transactionType}</div>
                     </div>

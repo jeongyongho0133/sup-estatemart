@@ -7,7 +7,7 @@ import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, setDoc, o
 import AgentReviews from '../components/reviews/AgentReviews';
 
 const Profile = () => {
-    const { currentUser, userData, logout } = useAuth();
+    const { currentUser, userData, logout, deleteUserAccount } = useAuth();
     const navigate = useNavigate();
     // Use role from userData if available
     const role = userData?.role || 'user';
@@ -19,15 +19,32 @@ const Profile = () => {
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('profile'); // 'profile' or 'likes'
     const [uploadingDoc, setUploadingDoc] = useState(false);
-    
-    // Profile Edit States
+
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [editForm, setEditForm] = useState({
-        displayName: userData?.nickname || currentUser?.displayName || '',
-        phone: userData?.phone || '',
-        address: userData?.address || '',
-        photoURL: currentUser?.photoURL || ''
+        displayName: '',
+        phone: '',
+        address: '',
+        photoURL: '',
+        officeName: '',
+        registrationNumber: '',
+        kakaoOpenChatUrl: ''
     });
+
+    useEffect(() => {
+        if (userData) {
+            setEditForm({
+                displayName: userData.nickname || currentUser?.displayName || '',
+                phone: userData.phone || '',
+                address: userData.address || '',
+                photoURL: userData.photoURL || currentUser?.photoURL || '',
+                officeName: userData.brokerInfo?.officeName || '',
+                registrationNumber: userData.brokerInfo?.registrationNumber || '',
+                kakaoOpenChatUrl: userData.brokerInfo?.kakaoOpenChatUrl || ''
+            });
+        }
+    }, [userData, currentUser]);
+
     const [profileImageFile, setProfileImageFile] = useState(null);
     const [profileImagePreview, setProfileImagePreview] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -147,6 +164,19 @@ const Profile = () => {
         }
     };
 
+    const handleMarkAsSold = async (id) => {
+        if (window.confirm("정말 거래 완료 처리를 하시겠습니까?\n거래 완료된 매물은 [거래 내역]으로 이동합니다.")) {
+            try {
+                await updateDoc(doc(db, "listings", id), { status: 'sold' });
+                setMyListings(prev => prev.map(item => item.id === id ? { ...item, status: 'sold' } : item));
+                alert("거래 완료 처리가 완료되었습니다.");
+            } catch (e) {
+                console.error(e);
+                alert("처리 중 오류가 발생했습니다.");
+            }
+        }
+    };
+
     const handleUnlike = async (listingId) => {
         try {
             await deleteDoc(doc(db, "users", currentUser.uid, "likes", listingId));
@@ -200,24 +230,56 @@ const Profile = () => {
                 photoURL = await getDownloadURL(imageRef);
             }
 
-            // 2. Update Firebase Auth Profile
+            // 2. Check for changes in sensitive business info (for agents)
+            let newVerificationStatus = verificationStatus;
+            let businessInfoChanged = false;
+
+            if (role === 'agent' || role === 'broker') {
+                const oldOfficeName = userData?.brokerInfo?.officeName || '';
+                const oldRegNumber = userData?.brokerInfo?.registrationNumber || '';
+
+                if (editForm.officeName !== oldOfficeName || editForm.registrationNumber !== oldRegNumber) {
+                    businessInfoChanged = true;
+                    newVerificationStatus = 'none'; // Revoke verification
+                }
+            }
+
+            // 3. Update Firebase Auth Profile (only displayName and photoURL)
             const { updateProfile } = await import('firebase/auth');
             await updateProfile(currentUser, {
                 displayName: editForm.displayName,
                 photoURL: photoURL
             });
 
-            // 3. Update Firestore User Document (use setDoc for reliability)
-            await setDoc(doc(db, "users", currentUser.uid), {
+            // 4. Update Firestore User Document
+            const userUpdatePayload = {
                 nickname: editForm.displayName,
                 phone: editForm.phone,
                 address: editForm.address,
                 photoURL: photoURL,
-                updatedAt: serverTimestamp()
-            }, { merge: true });
+                role: role,
+                updatedAt: serverTimestamp(),
+                verificationStatus: newVerificationStatus
+            };
 
-            alert("프로필이 성공적으로 수정되었습니다.");
-            setIsSaving(false); // Reset before reload
+            if (role === 'agent' || role === 'broker') {
+                userUpdatePayload.brokerInfo = {
+                    ...userData?.brokerInfo,
+                    officeName: editForm.officeName,
+                    registrationNumber: editForm.registrationNumber,
+                    kakaoOpenChatUrl: editForm.kakaoOpenChatUrl
+                };
+            }
+
+            await setDoc(doc(db, "users", currentUser.uid), userUpdatePayload, { merge: true });
+
+            if (businessInfoChanged) {
+                alert("상호 또는 등록번호가 변경되어 중개사 인증이 해제되었습니다.\n정상적인 활동을 위해 마이페이지 하단에서 증빙 서류를 다시 제출해주세요.");
+            } else {
+                alert("프로필이 성공적으로 수정되었습니다.");
+            }
+
+            setIsSaving(false);
             window.location.reload();
         } catch (error) {
             console.error("Error saving profile:", error);
@@ -335,14 +397,14 @@ const Profile = () => {
                             ) : (
                                 <span className="w-full h-full flex items-center justify-center text-3xl pb-1 text-gray-400">👤</span>
                             )}
-                            
+
                             {isEditingProfile && (
                                 <label className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                                     <span className="text-white text-[10px] font-bold">변경</span>
                                     <input type="file" className="hidden" accept="image/*" onChange={handleProfileImageChange} />
                                 </label>
                             )}
-                            
+
                             {!isEditingProfile && verificationStatus === 'verified' && (
                                 <div className="absolute bottom-0 right-0 bg-blue-500 text-white text-[10px] px-1 rounded-tl-lg font-bold shadow-sm">
                                     ✓
@@ -362,51 +424,105 @@ const Profile = () => {
                                                 </span>
                                             )}
                                         </div>
+                                        {/* Business Name Display for Agents */}
+                                        {(role === 'agent' || role === 'broker') && (
+                                            <div className="text-xs font-bold text-indigo-600 mt-1">
+                                                🏢 {userData.brokerInfo?.officeName || '상호 미등록'}
+                                            </div>
+                                        )}
                                         <div className="text-xs text-gray-500 mt-1 flex items-center">
                                             <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded mr-1.5 font-medium">ID</span>
                                             {currentUser.email}
                                         </div>
                                     </div>
                                     <div className="flex items-center space-x-2 mt-2">
-                                        <span className={`text-[11px] font-bold px-2 py-1 rounded-md ${
-                                            role === 'admin' ? 'bg-red-50 text-red-600 border border-red-100' :
-                                            role === 'broker' || role === 'agent' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 
-                                            'bg-gray-50 text-gray-600 border border-gray-100'
-                                        }`}>
-                                            {role === 'admin' ? '관리자' : (role === 'broker' || role === 'agent' ? '부동산 중개사' : '일반 회원')}
+                                        <span className={`text-[11px] font-bold px-2 py-1 rounded-md ${role === 'admin' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                role === 'broker' || role === 'agent' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                                                    'bg-gray-50 text-gray-600 border border-gray-100'
+                                            }`}>
+                                            {role === 'admin' ? '관리자' : (role === 'broker' || role === 'agent' ? '공인 중개사' : '일반 회원')}
                                         </span>
                                         <span className="text-[11px] font-medium px-2 py-1 bg-green-50 text-green-700 border border-green-100 rounded-md flex items-center space-x-1">
                                             <span>방문</span>
                                             <span className="font-bold">{userData?.loginCount || 1}회</span>
                                         </span>
+                                        <span className="text-[11px] font-medium px-2 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-md flex items-center space-x-1">
+                                            <span>포인트</span>
+                                            <span className="font-bold">{(userData?.points || 0).toLocaleString()}P</span>
+                                        </span>
                                     </div>
                                 </>
                             ) : (
                                 <div className="space-y-3">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 block mb-1">닉네임</label>
-                                        <input 
-                                            type="text" 
-                                            value={editForm.displayName} 
-                                            onChange={(e) => setEditForm(prev => ({ ...prev, displayName: e.target.value }))}
-                                            placeholder="닉네임 입력"
-                                            className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-market-orange outline-none"
-                                        />
+                                    {/* Office Name (Only for Agents) */}
+                                    {(role === 'agent' || role === 'broker') && (
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">상호 (중개사무소 명칭)</label>
+                                            <input
+                                                type="text"
+                                                value={editForm.officeName}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, officeName: e.target.value }))}
+                                                placeholder="상호명을 입력해주세요"
+                                                className="w-full p-2 bg-indigo-50/30 border border-indigo-100 rounded-lg text-sm focus:border-indigo-500 outline-none font-bold text-indigo-700"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className={role === 'agent' || role === 'broker' ? 'grid grid-cols-2 gap-2' : ''}>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">성명 (대표자)</label>
+                                            <input
+                                                type="text"
+                                                value={editForm.displayName}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, displayName: e.target.value }))}
+                                                placeholder="실명 입력"
+                                                disabled={role === 'agent' || role === 'broker'}
+                                                className={`w-full p-2 border border-gray-200 rounded-lg text-sm outline-none ${role === 'agent' || role === 'broker' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-50 focus:border-market-orange'}`}
+                                            />
+                                            {(role === 'agent' || role === 'broker') && <p className="text-[9px] text-gray-400 mt-0.5">대표자 성명은 수정이 불가능합니다.</p>}
+                                        </div>
+
+                                        {(role === 'agent' || role === 'broker') && (
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 block mb-1">중개업 등록번호</label>
+                                                <input
+                                                    type="text"
+                                                    value={editForm.registrationNumber}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, registrationNumber: e.target.value }))}
+                                                    placeholder="등록번호 입력"
+                                                    className="w-full p-2 bg-indigo-50/30 border border-indigo-100 rounded-lg text-sm focus:border-indigo-500 outline-none"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
+                                    
+                                    {(role === 'agent' || role === 'broker') && (
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">카카오톡 오픈채팅 URL (선택)</label>
+                                            <input
+                                                type="url"
+                                                value={editForm.kakaoOpenChatUrl}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, kakaoOpenChatUrl: e.target.value }))}
+                                                placeholder="https://open.kakao.com/o/..."
+                                                className="w-full p-2 bg-indigo-50/30 border border-indigo-100 rounded-lg text-sm focus:border-indigo-500 outline-none"
+                                            />
+                                        </div>
+                                    )}
+
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <label className="text-[10px] font-bold text-gray-400 block mb-1">연락처</label>
-                                            <input 
-                                                type="text" 
-                                                value={editForm.phone} 
+                                            <input
+                                                type="text"
+                                                value={editForm.phone}
                                                 onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
                                                 placeholder="010-0000-0000"
                                                 className="w-full p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:border-market-orange outline-none"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">상태</label>
-                                            <div className="p-2 text-sm text-gray-400 bg-gray-100 rounded-lg">{role === 'user' ? '일반회원' : '중개사'}</div>
+                                            <label className="text-[10px] font-bold text-gray-400 block mb-1">회원 구분</label>
+                                            <div className="p-2 text-sm text-gray-400 bg-gray-100 rounded-lg font-bold">{role === 'user' ? '일반회원' : '공인중개사'}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -419,14 +535,14 @@ const Profile = () => {
                             <div>
                                 <label className="text-[10px] font-bold text-gray-400 block mb-1">주소</label>
                                 <div className="flex space-x-2">
-                                    <input 
-                                        type="text" 
-                                        value={editForm.address} 
+                                    <input
+                                        type="text"
+                                        value={editForm.address}
                                         readOnly
                                         placeholder="주소 검색을 이용해주세요"
                                         className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none"
                                     />
-                                    <button 
+                                    <button
                                         onClick={handleAddressSearch}
                                         className="px-4 py-2 bg-gray-800 text-white text-xs font-bold rounded-lg"
                                     >
@@ -434,7 +550,7 @@ const Profile = () => {
                                     </button>
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 onClick={handleSaveProfile}
                                 disabled={isSaving}
                                 className={`w-full py-3 ${isSaving ? 'bg-gray-400' : 'bg-market-orange'} text-white font-bold rounded-xl shadow-lg transition transform active:scale-95`}
@@ -623,8 +739,8 @@ const Profile = () => {
                                             </p>
                                             <div className="font-bold text-market-orange mt-1">
                                                 {item.transactionType === '월세'
-                                                    ? `보증금 ${item.deposit}/월세 ${item.monthlyRent}`
-                                                    : `${item.price}만원`
+                                                    ? `보증금 ${Number(item.deposit || 0).toLocaleString()}/월세 ${Number(item.monthlyRent || 0).toLocaleString()}`
+                                                    : `${Number(item.price || 0).toLocaleString()}만원`
                                                 }
                                             </div>
                                         </div>
@@ -633,10 +749,16 @@ const Profile = () => {
                                 <div className="flex border-t divide-x">
                                     <button
                                         onClick={() => handleStatusChange(item.id, item.status)}
-                                        className={`flex-1 py-3 text-sm font-medium hover:bg-gray-50 ${item.status === 'active' ? 'text-blue-600' : 'text-gray-500'
+                                        className={`flex-1 py-3 text-xs font-medium hover:bg-gray-50 border-r ${item.status === 'active' ? 'text-blue-600' : 'text-gray-500'
                                             }`}
                                     >
-                                        {item.status === 'active' ? '예약중 설정' : '판매중 설정'}
+                                        {item.status === 'active' ? '예약중' : '판매중'}
+                                    </button>
+                                    <button
+                                        onClick={() => handleMarkAsSold(item.id)}
+                                        className="flex-1 py-3 text-xs font-bold text-market-orange hover:bg-orange-50 border-r"
+                                    >
+                                        거래완료
                                     </button>
                                     <button
                                         onClick={() => navigate(`/edit/${item.id}`)}
@@ -646,7 +768,7 @@ const Profile = () => {
                                     </button>
                                     <button
                                         onClick={() => handleDelete(item.id)}
-                                        className="flex-1 py-3 text-sm font-medium text-red-500 hover:bg-red-50"
+                                        className="flex-1 py-3 text-xs font-medium text-red-500 hover:bg-red-50"
                                     >
                                         삭제
                                     </button>
@@ -685,8 +807,8 @@ const Profile = () => {
                                                 </p>
                                                 <div className="font-bold text-gray-400 mt-1">
                                                     {item.transactionType === '월세'
-                                                        ? `보증금 ${item.deposit}/월세 ${item.monthlyRent}`
-                                                        : `${item.price}만원`
+                                                        ? `보증금 ${Number(item.deposit || 0).toLocaleString()}/월세 ${Number(item.monthlyRent || 0).toLocaleString()}`
+                                                        : `${Number(item.price || 0).toLocaleString()}만원`
                                                     }
                                                 </div>
                                             </div>
@@ -717,12 +839,36 @@ const Profile = () => {
                 )}
             </div>
 
-            <div className="p-4 bg-gray-50 min-h-[100px]">
+            <div className="p-4 bg-gray-50 min-h-[150px] pb-24">
                 <button
                     onClick={handleLogout}
-                    className="w-full py-3 bg-white border border-gray-200 text-gray-500 rounded-xl"
+                    className="w-full py-3 bg-white border border-gray-200 text-gray-500 rounded-xl font-medium mb-3"
                 >
                     로그아웃
+                </button>
+                
+                <button
+                    onClick={async () => {
+                        const confirmDelete = window.confirm("정말 탈퇴하시겠습니까?\n탈퇴 시 등록한 모든 매물과 정보가 삭제되며 복구가 불가능합니다.");
+                        if (confirmDelete) {
+                            try {
+                                await deleteUserAccount();
+                                alert("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.");
+                                navigate('/');
+                            } catch (e) {
+                                if (e.code === 'auth/requires-recent-login') {
+                                    alert("보안을 위해 재로그인이 필요합니다. 다시 로그인 후 탈퇴를 진행해 주세요.");
+                                    await logout();
+                                    navigate('/login');
+                                } else {
+                                    alert("탈퇴 처리 중 오류가 발생했습니다: " + e.message);
+                                }
+                            }
+                        }
+                    }}
+                    className="w-full py-3 text-gray-300 text-xs underline decoration-gray-200"
+                >
+                    회원 탈퇴하기
                 </button>
             </div>
         </MobileLayout>

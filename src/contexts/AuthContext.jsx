@@ -66,7 +66,21 @@ export const AuthProvider = ({ children }) => {
                             setUserData(updatedData);
                         }
                     } else {
-                        setUserData({ role: 'user' });
+                        // AUTO-CREATE user document if it doesn't exist (e.g. first social login)
+                        const { setDoc, serverTimestamp } = await import('firebase/firestore');
+                        const newUserDoc = {
+                            uid: user.uid,
+                            email: user.email,
+                            displayName: user.displayName || '사용자',
+                            photoURL: user.photoURL || '',
+                            role: 'user',
+                            loginCount: 1,
+                            createdAt: serverTimestamp(),
+                            lastLoginAt: serverTimestamp()
+                        };
+                        await setDoc(doc(db, "users", user.uid), newUserDoc);
+                        setUserData(newUserDoc);
+                        sessionStorage.setItem('session_recorded', 'true');
                     }
                 } catch (e) {
                     console.error("Error fetching user data:", e);
@@ -81,6 +95,43 @@ export const AuthProvider = ({ children }) => {
         return unsubscribe;
     }, []);
 
+    const deleteUserAccount = async () => {
+        if (!currentUser) return;
+        try {
+            const { doc, deleteDoc, collection, query, where, getDocs, writeBatch } = await import('firebase/firestore');
+            const { db } = await import('../firebase');
+            const { deleteUser } = await import('firebase/auth');
+
+            // 1. Delete user's listings
+            const listingsQ = query(collection(db, "listings"), where("userId", "==", currentUser.uid));
+            const listingsSnap = await getDocs(listingsQ);
+            const batch = writeBatch(db);
+            listingsSnap.forEach((lDoc) => {
+                batch.delete(lDoc.ref);
+            });
+            
+            // 2. Delete user's likes/bookmarks
+            const likesQ = query(collection(db, "users", currentUser.uid, "likes"));
+            const likesSnap = await getDocs(likesQ);
+            likesSnap.forEach((lDoc) => {
+                batch.delete(lDoc.ref);
+            });
+
+            // 3. Delete the user document itself
+            batch.delete(doc(db, "users", currentUser.uid));
+            
+            await batch.commit();
+
+            // 4. Delete Firebase Auth account
+            await deleteUser(currentUser);
+            
+            return true;
+        } catch (error) {
+            console.error("Account deletion failed:", error);
+            throw error;
+        }
+    };
+
     const value = {
         currentUser,
         userData,
@@ -89,6 +140,7 @@ export const AuthProvider = ({ children }) => {
         loginWithFacebook,
         resetPassword,
         logout,
+        deleteUserAccount,
     };
 
     return (

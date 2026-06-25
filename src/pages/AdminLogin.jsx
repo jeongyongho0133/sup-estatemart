@@ -16,42 +16,18 @@ const AdminLogin = () => {
         e.preventDefault();
         setError('');
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            // Log Login Activity
-            try {
-                // Simple IP check
-                let ip = 'Unknown';
-                try {
-                    const res = await fetch('https://api.ipify.org?format=json');
-                    const data = await res.json();
-                    ip = data.ip;
-                } catch (err) {
-                    console.warn("Failed to fetch IP", err);
-                }
-
-                await addDoc(collection(db, "audit_logs"), {
-                    action: 'login',
-                    targetId: user.uid,
-                    details: 'Admin Login Successful',
-                    adminId: user.uid,
-                    adminEmail: user.email,
-                    createdAt: serverTimestamp(),
-                    ipAddress: ip,
-                    userAgent: navigator.userAgent
-                });
-            } catch (logErr) {
-                console.error("Logging failed", logErr);
-            }
-
-            // Note: Actual role check happens in the Admin page or via Firestore rules
-            // Ideally we check role here too, but for MVP we redirect first.
-            // If not admin, Admin.jsx will kick them out.
+            await signInWithEmailAndPassword(auth, email, password);
+            // We'll let Admin.jsx handle the logging and role repair after navigation
             navigate('/admin');
         } catch (error) {
             console.error("Admin Login failed:", error);
-            setError("로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.");
+            if (error.code === 'auth/wrong-password') {
+                setError("비밀번호가 일치하지 않습니다.");
+            } else if (error.code === 'auth/user-not-found') {
+                setError("등록되지 않은 관리자 계정입니다.");
+            } else {
+                setError("로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.");
+            }
         }
     };
 

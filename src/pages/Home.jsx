@@ -6,7 +6,7 @@ import NaverMap from '../components/common/NaverMap';
 import GoogleMap from '../components/common/GoogleMap';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, where, limit, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, limit, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 
 const DEFAULT_CATEGORIES = [
@@ -43,6 +43,7 @@ const Home = () => {
     const [isCategoryExpanded, setIsCategoryExpanded] = useState(false);
     const [viewMode, setViewMode] = useState('list');
     const [mapProvider, setMapProvider] = useState('kakao');
+    const [adminKakaoUrl, setAdminKakaoUrl] = useState('https://open.kakao.com/o/svCp9uti');
 
     useEffect(() => {
         // Fetch Listings
@@ -100,6 +101,22 @@ const Home = () => {
                 setLatestNotice({ id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() });
             }
         });
+
+        // Fetch System Settings
+        const fetchSettings = async () => {
+            try {
+                const docSnap = await getDoc(doc(db, "settings", "system"));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.adminKakaoOpenChatUrl) {
+                        setAdminKakaoUrl(data.adminKakaoOpenChatUrl);
+                    }
+                }
+            } catch (e) {
+                console.error("Error fetching system settings:", e);
+            }
+        };
+        fetchSettings();
 
         // Notifications Unread Count
         let unsubscribeNotifs = () => { };
@@ -284,8 +301,7 @@ const Home = () => {
             {/* Intro Search Section */}
             <div className="px-4 py-6 bg-gradient-to-b from-orange-50 to-white">
                 <h1 className="text-2xl font-bold mb-4 leading-tight">
-                    어떤 부동산을 찾고 계신가요?<br />
-                    <span className="text-market-orange">에스테이트 마켓</span>에서 찾아보세요.
+                    좋은 <span className="text-market-orange">집터</span>를 찾아보세요.
                 </h1>
                 <div className="relative">
                     <input
@@ -431,8 +447,8 @@ const Home = () => {
                                             <div className="text-[10px] text-gray-500 mt-1 truncate">{displayLocation}</div>
                                             <div className="font-bold text-market-orange text-sm mt-1">
                                                 {listing.transactionType === '월세'
-                                                    ? `보증금 ${listing.deposit || 0} / 월세 ${listing.monthlyRent || 0}`
-                                                    : `${listing.price || 0}만원`
+                                                    ? `보증금 ${Number(listing.deposit || 0).toLocaleString()} / 월세 ${Number(listing.monthlyRent || 0).toLocaleString()}`
+                                                    : `${Number(listing.price || 0).toLocaleString()}만원`
                                                 }
                                             </div>
                                         </div>
@@ -578,6 +594,15 @@ const Home = () => {
                     </div>
                 </div>
             )}
+
+            {/* Admin Kakao Open Chat FAB */}
+            <button
+                onClick={() => window.open(adminKakaoUrl, '_blank')}
+                className="fixed bottom-40 right-4 z-[90] flex items-center justify-center space-x-2 bg-[#FEE500] text-[#000000] px-4 py-3 rounded-full shadow-lg hover:bg-[#F4DC00] transition transform hover:scale-105 active:scale-95 border border-yellow-400"
+            >
+                <span className="font-black text-lg leading-none">TALK</span>
+                <span className="font-bold text-sm">고객센터 문의</span>
+            </button>
         </MobileLayout>
     );
 };

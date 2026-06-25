@@ -1,8 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useCompare } from '../contexts/CompareContext';
 
 const ListingCard = ({ listing }) => {
     const navigate = useNavigate();
+    const { addToCompare, removeFromCompare, isCompared } = useCompare();
+    const compared = isCompared(listing.id);
 
     // Helper to mask name (e.g., 홍길동 -> 홍*동)
     const maskName = (name) => {
@@ -124,15 +127,26 @@ const ListingCard = ({ listing }) => {
                 <div className="flex items-end justify-between mt-1">
                     <div className="font-bold text-base text-gray-900">
                         {listing.transactionType === '월세'
-                            ? `보증금 ${listing.deposit || 0} / 월세 ${listing.monthlyRent || 0}`
+                            ? `보증금 ${Number(listing.deposit || 0).toLocaleString()} / 월세 ${Number(listing.monthlyRent || 0).toLocaleString()}`
                             : formatPriceToKorean(listing.price)
                         }
                     </div>
 
-                    <div className="flex items-center space-x-1 text-gray-400 text-[10px]">
-                        <span>♡ {listing.likeCount || 0}</span>
-                        <span className="mx-1">·</span>
-                        <span>조회 {listing.viewCount || 0}</span>
+                    <div className="flex items-center space-x-2 text-gray-400 text-[10px]">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (compared) removeFromCompare(listing.id);
+                                else addToCompare(listing);
+                            }}
+                            className={`flex items-center space-x-0.5 border px-1.5 py-0.5 rounded font-bold ${compared ? 'border-market-orange text-market-orange bg-orange-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                        >
+                            <span>{compared ? '✓ 비교함' : '+ 매물비교'}</span>
+                        </button>
+                        <div className="flex items-center space-x-1">
+                            <span>♡ {listing.likeCount || 0}</span>
+                            <span>조회 {listing.viewCount || 0}</span>
+                        </div>
                     </div>
                 </div>
             </div>

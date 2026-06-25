@@ -81,8 +81,8 @@ const NaverMap = ({ lat, lng, listings = [], onMarkerClick }) => {
             <div className="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-500 text-sm p-4 text-center">
                 <span className="text-2xl mb-2">🇳</span>
                 <p>네이버 지도를 불러올 수 없습니다.</p>
-                <p className="text-[10px] mt-1 text-gray-400">index.html에 올바른 ncpClientId가 포함된 스크립트가 필요합니다.</p>
-                <code className="text-[8px] mt-2 bg-gray-200 p-1 rounded font-mono break-all">&lt;script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=발급받은키"&gt;&lt;/script&gt;</code>
+                <p className="text-[10px] mt-1 text-gray-400">네이버 콘솔에 'http://localhost:5173' 도메인이 등록되어 있는지 확인해 주세요.</p>
+                <code className="text-[8px] mt-2 bg-gray-200 p-1 rounded font-mono break-all">&lt;script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=trxnzbe7zg"&gt;&lt;/script&gt;</code>
             </div>
         );
     }

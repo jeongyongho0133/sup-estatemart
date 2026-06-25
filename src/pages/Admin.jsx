@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, updateDoc, deleteDoc, doc, orderBy, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, deleteDoc, doc, orderBy, addDoc, increment } from 'firebase/firestore';
 import MobileLayout from '../components/layout/MobileLayout';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,6 +27,8 @@ const Admin = () => {
     const [inquiries, setInquiries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [listingSubTab, setListingSubTab] = useState('pending'); // 'pending' | 'all'
+    const [userSubTab, setUserSubTab] = useState('all'); // 'all' | 'normal' | 'broker'
+    const [userSearchTerm, setUserSearchTerm] = useState(''); // User search functionality
     const [supportSubTab, setSupportSubTab] = useState('pending'); // 'pending' | 'all'
     const [stats, setStats] = useState({
         newListingsToday: 0,
@@ -42,11 +44,28 @@ const Admin = () => {
             return;
         }
 
-        if (currentUser.role !== 'admin' && currentUser.email !== 'grandcity@naver.com') {
+        const isAdmin = currentUser.role === 'admin' || currentUser.email === 'grandcity@naver.com' || currentUser.email === 'grand75761500@gmail.com' || currentUser.email === 'yungho.jeong@gmail.com';
+        const isSubAdmin = currentUser.role === 'sub-admin';
+
+        if (!isAdmin && !isSubAdmin) {
             alert("관리자 권한이 없습니다.");
             navigate('/');
             return;
         }
+
+        // Auto-repair admin role for master email in Firestore if needed
+        const repairRole = async () => {
+            const isMasterEmail = currentUser.email === 'grandcity@naver.com' || currentUser.email === 'grand75761500@gmail.com' || currentUser.email === 'yungho.jeong@gmail.com';
+            if (isMasterEmail && currentUser.role !== 'admin') {
+                try {
+                    await updateDoc(doc(db, "users", currentUser.uid), { role: 'admin' });
+                    console.log("Admin role auto-repaired");
+                } catch (e) {
+                    console.error("Repair failed:", e);
+                }
+            }
+        };
+        repairRole();
 
         if (activeTab === 'listings') {
             fetchPendingListings();
@@ -57,6 +76,7 @@ const Admin = () => {
             fetchReports();
         } else if (activeTab === 'users') {
             fetchUsers();
+            fetchAllListings(); // Ensure counts are accurate on the user board
         } else if (activeTab === 'support') {
             fetchInquiries();
         }
@@ -69,10 +89,14 @@ const Admin = () => {
         try {
             // 1. Fetch Users for Ratios
             const usersSnap = await getDocs(collection(db, "users"));
-            const userCounts = { user: 0, broker: 0, agent: 0 };
+            const userCounts = { user: 0, broker: 0, agent: 0, admin: 0, subAdmin: 0, total: 0 };
             usersSnap.forEach(doc => {
-                const role = doc.data().role || 'user';
-                if (userCounts[role] !== undefined) userCounts[role]++;
+                const data = doc.data();
+                const role = data.role || 'user';
+                userCounts.total++;
+                if (role === 'admin') userCounts.admin++;
+                else if (role === 'sub-admin') userCounts.subAdmin++;
+                else if (role === 'broker' || role === 'agent') userCounts.broker++;
                 else userCounts.user++;
             });
 
@@ -208,13 +232,23 @@ const Admin = () => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+            // Remove orderBy for a moment to ensure we get ALL users first, 
+            // then sort manually to handle missing createdAt fields
+            const q = query(collection(db, "users"));
             const querySnapshot = await getDocs(q);
             const items = [];
             querySnapshot.forEach((doc) => {
                 items.push({ id: doc.id, ...doc.data() });
             });
-            setUsers(items);
+            
+            // Manual sort: items with createdAt first, then by date desc
+            const sortedItems = items.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || 0;
+                const timeB = b.createdAt?.seconds || 0;
+                return timeB - timeA;
+            });
+            
+            setUsers(sortedItems);
         } catch (error) {
             console.error("Error fetching users", error);
         } finally {
@@ -276,12 +310,12 @@ const Admin = () => {
                         createdAt: serverTimestamp(),
                         readBy: []
                     });
+
+                    await logActivity('approve', id, `Listing Approved: ${listingData.title}`);
                 }
 
                 setPendingListings(prev => prev.filter(item => item.id !== id));
                 if (listingSubTab === 'all') fetchAllListings();
-
-                await logActivity('approve', id, `Listing Approved: ${listingData.title}`);
                 alert("승인되었습니다.");
             } catch (error) {
                 console.error("Error approving listing:", error);
@@ -355,6 +389,62 @@ const Admin = () => {
         }
     };
 
+    const handleGrantPoints = async (userId, currentPoints = 0) => {
+        const amountStr = window.prompt("지급할 포인트 금액을 입력하세요 (차감 시 - 입력):", "1000");
+        if (amountStr === null) return;
+        
+        const amount = parseInt(amountStr);
+        if (isNaN(amount)) {
+            alert("숫자만 입력 가능합니다.");
+            return;
+        }
+
+        const reason = window.prompt("지급/차감 사유를 입력하세요:", "이벤트 참여 보상");
+        if (reason === null) return;
+
+        try {
+            const amountNum = Number(amount);
+            await updateDoc(doc(db, "users", userId), {
+                points: increment(amountNum)
+            });
+            
+            await logActivity('point_grant', userId, `Points: ${amountNum > 0 ? '+' : ''}${amountNum} (${reason})`);
+            alert(`${amountNum}포인트가 성공적으로 ${amountNum > 0 ? '지급' : '차감'}되었습니다.`);
+            fetchUsers(); // Refresh list
+        } catch (error) {
+            console.error("Detailed error granting points:", error);
+            alert(`포인트 처리 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`);
+        }
+    };
+
+    const handleCleanupDatabase = async () => {
+        if (!window.confirm("경고: 관리자 계정을 제외한 모든 회원 데이터를 데이터베이스에서 영구 삭제합니다. 계속하시겠습니까?")) return;
+        
+        try {
+            setLoading(true);
+            const usersSnap = await getDocs(collection(db, "users"));
+            const keepEmails = ['grandcity@naver.com', 'grand75761500@gmail.com', 'yungho.jeong@gmail.com'];
+            let deletedCount = 0;
+            
+            for (const userDoc of usersSnap.docs) {
+                const data = userDoc.data();
+                if (!keepEmails.includes(data.email)) {
+                    await deleteDoc(doc(db, "users", userDoc.id));
+                    deletedCount++;
+                }
+            }
+            
+            alert(`총 ${deletedCount}명의 회원 데이터가 데이터베이스에서 삭제되었습니다.`);
+            fetchUsers();
+            fetchDashboardData();
+        } catch (error) {
+            console.error("Detailed error cleaning up DB:", error);
+            alert(`데이터 삭제 중 오류가 발생했습니다: ${error.message || error.code || '알 수 없는 오류'}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleApproveVerification = async (id) => {
         if (window.confirm("이 회원의 중개사 인증을 승인하시겠습니까?")) {
             try {
@@ -402,11 +492,35 @@ const Admin = () => {
 
     // User Management (Example: Promote/Demote or Delete)
     const toggleRole = async (id, currentRole) => {
-        const newRole = (currentRole === 'agent' || currentRole === 'broker') ? 'user' : 'agent';
-        if (window.confirm(`이 회원의 등급을 '${newRole}'(으)로 변경하시겠습니까?`)) {
-            await updateDoc(doc(db, "users", id), { role: newRole });
-            await logActivity('update', id, `Role changed from ${currentRole} to ${newRole}`);
-            setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
+        const roles = ['user', 'agent', 'broker', 'sub-admin', 'admin'];
+        const roleNames = {
+            'user': '일반 회원',
+            'agent': '일반 중개사',
+            'broker': '인증 중개사',
+            'sub-admin': '부관리자',
+            'admin': '최고 관리자'
+        };
+
+        const newRole = window.prompt(
+            `변경할 등급을 입력해주세요:\n(user, agent, sub-admin, admin)\n\n현재 등급: ${roleNames[currentRole] || currentRole}`,
+            currentRole
+        );
+
+        if (!newRole || !roles.includes(newRole)) {
+            if (newRole !== null) alert("올바른 등급을 입력해주세요.");
+            return;
+        }
+
+        if (window.confirm(`이 회원의 등급을 '${roleNames[newRole]}'(으)로 변경하시겠습니까?`)) {
+            try {
+                await updateDoc(doc(db, "users", id), { role: newRole });
+                await logActivity('update', id, `Role changed from ${currentRole} to ${newRole}`);
+                setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
+                alert("등급이 변경되었습니다.");
+            } catch (error) {
+                console.error("Error updating role:", error);
+                alert("등급 변경 중 오류가 발생했습니다.");
+            }
         }
     };
 
@@ -426,78 +540,76 @@ const Admin = () => {
             </header>
 
             {/* Tab Nav */}
-            <div className="flex border-b border-gray-200 bg-white sticky top-14 z-10">
+            <div className="flex border-b border-gray-200 bg-white sticky top-14 z-10 overflow-x-auto no-scrollbar">
                 <button
                     onClick={() => setActiveTab('listings')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'listings' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'listings' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
                     매물 ({pendingListings.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('verifications')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'verifications' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'verifications' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
-                    인증 심사 ({pendingVerifications.length})
+                    인증 ({pendingVerifications.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('reports')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'reports' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'reports' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
                     신고 ({reports.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('users')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'users' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'users' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
-                    회원 ({users.length})
+                    회원 ({stats.userCounts.total})
                 </button>
                 <button
                     onClick={() => setActiveTab('cms')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'cms' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'cms' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
                     CMS
                 </button>
                 <button
                     onClick={() => setActiveTab('support')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'support' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'support' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
                     고객지원
                 </button>
-                <button
-                    onClick={() => setActiveTab('analytics')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'analytics' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
-                >
-                    통계분석
-                </button>
-                <button
-                    onClick={() => setActiveTab('notifications')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'notifications' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
-                >
-                    알림관리
-                </button>
-                <button
-                    onClick={() => setActiveTab('subscription')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'subscription' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
-                >
-                    결제/멤버십
-                </button>
-                <button
-                    onClick={() => setActiveTab('settings')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'settings' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
-                >
-                    시스템 설정
-                </button>
-                <button
-                    onClick={() => setActiveTab('logs')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'logs' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
-                >
-                    활동 로그
-                </button>
+                {(currentUser.role === 'admin' || currentUser.email === 'grandcity@naver.com') && (
+                    <>
+                        <button
+                            onClick={() => setActiveTab('analytics')}
+                            className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'analytics' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                        >
+                            통계
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('subscription')}
+                            className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'subscription' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                        >
+                            결제
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'settings' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                        >
+                            설정
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('logs')}
+                            className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'logs' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                        >
+                            로그
+                        </button>
+                    </>
+                )}
                 <button
                     onClick={() => setActiveTab('reviews')}
-                    className={`flex-1 py-3 font-bold text-xs ${activeTab === 'reviews' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                    className={`flex-shrink-0 px-4 py-3 font-bold text-xs ${activeTab === 'reviews' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
-                    리뷰 관리
+                    리뷰
                 </button>
             </div>
 
@@ -748,53 +860,183 @@ const Admin = () => {
                 ) : activeTab === 'reviews' ? (
                     <ReviewMonitorTab />
                 ) : activeTab === 'users' ? (
-                    // Users Tab
-                    <div className="space-y-3">
-                        {users.map(user => (
-                            <div key={user.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-col space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <div className="font-bold text-sm flex items-center">
-                                            {user.displayName}
-                                            {user.isBanned && <span className="ml-2 text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded">차단됨</span>}
-                                        </div>
-                                        <div className="text-xs text-gray-500">{user.email}</div>
-                                        <div className="flex space-x-1 mt-1">
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${user.role === 'agent' || user.role === 'broker' ? 'border-blue-200 text-blue-600 bg-blue-50' :
-                                                user.role === 'admin' ? 'border-red-200 text-red-600 bg-red-50' :
-                                                    'border-gray-200 text-gray-500 bg-gray-50'
-                                                }`}>
-                                                {user.role}
-                                            </span>
-                                            {user.verificationStatus === 'verified' && (
-                                                <span className="text-[10px] px-1.5 py-0.5 border border-blue-500 text-blue-500 bg-white rounded font-bold">✓ 인증됨</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex space-x-2">
-                                        {!user.isBanned && (
-                                            <button
-                                                onClick={() => handleBanUser(user.id)}
-                                                className="px-3 py-1.5 bg-red-50 text-red-500 text-[10px] font-bold rounded border border-red-100 hover:bg-red-100"
-                                            >
-                                                차단
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => toggleRole(user.id, user.role)}
-                                            className="px-3 py-1.5 bg-gray-100 text-[10px] font-bold text-gray-600 rounded hover:bg-gray-200"
-                                        >
-                                            등급변경
-                                        </button>
-                                    </div>
-                                </div>
-                                {user.isBanned && user.banReason && (
-                                    <div className="text-[10px] bg-red-50 p-2 rounded text-red-600">
-                                        <strong>사유:</strong> {user.banReason}
-                                    </div>
-                                )}
+                    // Comprehensive User Management Board
+                    <div className="space-y-4">
+                        <div className="flex justify-end mb-2">
+                            <button
+                                onClick={handleCleanupDatabase}
+                                className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-lg hover:bg-red-100 transition"
+                            >
+                                ⚠️ 비관리자 DB 데이터 일괄 삭제
+                            </button>
+                        </div>
+                        {/* User Sub-Tabs */}
+                        <div className="flex bg-white px-2 border border-gray-100 rounded-xl shadow-sm mb-4">
+                            <button
+                                onClick={() => setUserSubTab('all')}
+                                className={`flex-1 py-3 text-xs font-bold transition ${userSubTab === 'all' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-400'}`}
+                            >
+                                전체 ({users.length})
+                            </button>
+                            <button
+                                onClick={() => setUserSubTab('normal')}
+                                className={`flex-1 py-3 text-xs font-bold transition ${userSubTab === 'normal' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-400'}`}
+                            >
+                                일반 ({users.filter(u => u.role === 'user').length})
+                            </button>
+                            <button
+                                onClick={() => setUserSubTab('broker')}
+                                className={`flex-1 py-3 text-xs font-bold transition ${userSubTab === 'broker' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                            >
+                                중개사/부관리자 ({users.filter(u => u.role !== 'user').length})
+                            </button>
+                        </div>
+
+                        {/* User Search Input */}
+                        <div className="mb-4">
+                            <input
+                                type="text"
+                                placeholder="회원 검색 (이메일, 성명, 상호명)"
+                                value={userSearchTerm}
+                                onChange={(e) => setUserSearchTerm(e.target.value)}
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-market-orange focus:ring-1 focus:ring-market-orange transition"
+                            />
+                        </div>
+
+                        {/* User List Board */}
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto no-scrollbar">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-100">
+                                            <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase">회원정보/등급</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase">가입일/방문</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase">보유 포인트</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase">매물현황</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase">관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {users
+                                            .filter(user => {
+                                                // 1. Role Filter
+                                                let roleMatch = true;
+                                                if (userSubTab === 'normal') roleMatch = user.role === 'user';
+                                                if (userSubTab === 'broker') roleMatch = user.role !== 'user';
+                                                
+                                                // 2. Search Filter
+                                                let searchMatch = true;
+                                                if (userSearchTerm.trim() !== '') {
+                                                    const term = userSearchTerm.toLowerCase();
+                                                    const nameMatch = user.displayName?.toLowerCase().includes(term);
+                                                    const emailMatch = user.email?.toLowerCase().includes(term);
+                                                    const officeMatch = user.brokerInfo?.officeName?.toLowerCase().includes(term);
+                                                    searchMatch = nameMatch || emailMatch || officeMatch;
+                                                }
+                                                
+                                                return roleMatch && searchMatch;
+                                            })
+                                            .map(user => {
+                                                const userListings = allListings.filter(l => l.userId === user.id);
+                                                const listingCategories = [...new Set(userListings.map(l => l.category || '기타'))].join(', ');
+                                                
+                                                return (
+                                                    <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex items-center space-x-3">
+                                                                <div className="w-8 h-8 rounded-full bg-gray-100 flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-400">
+                                                                    {user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full rounded-full object-cover" /> : user.displayName?.charAt(0)}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <div className="font-bold text-xs text-gray-800 truncate">
+                                                                        {user.displayName}
+                                                                        {user.isBanned && <span className="ml-1 text-[8px] bg-red-500 text-white px-1 rounded">차단</span>}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-gray-400 truncate">{user.email}</div>
+                                                                    <div className={`mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                                                        user.role === 'admin' ? 'border-red-200 text-red-500 bg-red-50' :
+                                                                        user.role === 'sub-admin' ? 'border-purple-200 text-purple-500 bg-purple-50' :
+                                                                        user.role === 'broker' ? 'border-blue-200 text-blue-500 bg-blue-50' :
+                                                                        'border-gray-200 text-gray-500 bg-gray-50'
+                                                                    }`}>
+                                                                        {user.role}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4">
+                                                            <div className="text-[10px] text-gray-600 font-medium">
+                                                                {user.createdAt?.seconds ? new Date(user.createdAt.seconds * 1000).toLocaleDateString() : '-'}
+                                                            </div>
+                                                            <div className="mt-1 flex items-center space-x-1">
+                                                                <span className="text-[9px] text-gray-400">방문:</span>
+                                                                <span className="text-[10px] font-bold text-gray-700">{user.loginCount || 0}회</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex items-center space-x-1">
+                                                                <span className="text-[11px] font-bold text-blue-600">{(user.points || 0).toLocaleString()}</span>
+                                                                <span className="text-[9px] text-gray-400">P</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex items-center space-x-1">
+                                                                <span className="text-[11px] font-bold text-market-orange">{userListings.length}</span>
+                                                                <span className="text-[9px] text-gray-400">건</span>
+                                                            </div>
+                                                            {userListings.length > 0 && (
+                                                                <div className="text-[9px] text-gray-400 mt-1 max-w-[80px] truncate" title={listingCategories}>
+                                                                    {listingCategories}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex space-x-2">
+                                                                <button
+                                                                    onClick={() => handleGrantPoints(user.id, user.points)}
+                                                                    className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-[10px] font-bold"
+                                                                    title="포인트 지급"
+                                                                >
+                                                                    P
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => toggleRole(user.id, user.role)}
+                                                                    className="p-1.5 bg-gray-100 rounded-lg hover:bg-gray-200 transition text-[10px] font-bold text-gray-600"
+                                                                >
+                                                                    등급
+                                                                </button>
+                                                                {!user.isBanned ? (
+                                                                    <button
+                                                                        onClick={() => handleBanUser(user.id)}
+                                                                        className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition text-[10px] font-bold"
+                                                                    >
+                                                                        차단
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={async () => {
+                                                                            if(window.confirm("차단을 해제하시겠습니까?")) {
+                                                                                await updateDoc(doc(db, "users", user.id), { isBanned: false });
+                                                                                fetchUsers();
+                                                                            }
+                                                                        }}
+                                                                        className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100 transition text-[10px] font-bold"
+                                                                    >
+                                                                        해제
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
                             </div>
-                        ))}
+                            {users.length === 0 && (
+                                <div className="py-20 text-center text-gray-400 text-xs font-medium">검색된 회원이 없습니다.</div>
+                            )}
+                        </div>
                     </div>
                 ) : null}
             </div>

@@ -25,6 +25,9 @@ import MembershipStore from './pages/MembershipStore'
 import Maintenance from './pages/Maintenance'
 
 import NotificationList from './pages/NotificationList'
+import AgentListings from './pages/AgentListings'
+import CompareListings from './pages/CompareListings'
+import { CompareProvider } from './contexts/CompareContext'
 
 const SystemCheck = ({ children }) => {
     const { userData, loading: authLoading } = useAuth();
@@ -63,32 +66,36 @@ const SystemCheck = ({ children }) => {
 function App() {
     return (
         <AuthProvider>
-            <BrowserRouter>
-                <SystemCheck>
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/signup" element={<Signup />} />
-                        <Route path="/terms" element={<Terms />} />
-                        <Route path="/listing/:id" element={<ListingDetail />} />
-                        <Route path="/chats" element={<ChatList />} />
-                        <Route path="/chat/:chatId" element={<ChatRoom />} />
-                        <Route path="/write" element={<ListingWrite />} />
-                        <Route path="/edit/:id" element={<ListingWrite />} />
-                        <Route path="/alerts" element={<NotificationList />} />
-                        <Route path="/profile" element={<Profile />} />
-                        <Route path="/notice" element={<NoticeList />} />
-                        <Route path="/notice/:id" element={<NoticeDetail />} />
-                        <Route path="/diagnostic" element={<DiagnosticTest />} />
-                        <Route path="/admin" element={<Admin />} />
-                        <Route path="/admin/categories" element={<AdminCategories />} />
-                        <Route path="/admin-login" element={<AdminLogin />} />
-                        <Route path="/support" element={<Support />} />
-                        <Route path="/inquiry/write" element={<InquiryWrite />} />
-                        <Route path="/store" element={<MembershipStore />} />
-                    </Routes>
-                </SystemCheck>
-            </BrowserRouter>
+            <CompareProvider>
+                <BrowserRouter>
+                    <SystemCheck>
+                        <Routes>
+                            <Route path="/" element={<Home />} />
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/signup" element={<Signup />} />
+                            <Route path="/terms" element={<Terms />} />
+                            <Route path="/listing/:id" element={<ListingDetail />} />
+                            <Route path="/chats" element={<ChatList />} />
+                            <Route path="/chat/:chatId" element={<ChatRoom />} />
+                            <Route path="/write" element={<ListingWrite />} />
+                            <Route path="/edit/:id" element={<ListingWrite />} />
+                            <Route path="/alerts" element={<NotificationList />} />
+                            <Route path="/profile" element={<Profile />} />
+                            <Route path="/notice" element={<NoticeList />} />
+                            <Route path="/notice/:id" element={<NoticeDetail />} />
+                            <Route path="/diagnostic" element={<DiagnosticTest />} />
+                            <Route path="/admin" element={<Admin />} />
+                            <Route path="/admin/categories" element={<AdminCategories />} />
+                            <Route path="/admin-login" element={<AdminLogin />} />
+                            <Route path="/support" element={<Support />} />
+                            <Route path="/inquiry/write" element={<InquiryWrite />} />
+                            <Route path="/store" element={<MembershipStore />} />
+                            <Route path="/agent/:id" element={<AgentListings />} />
+                            <Route path="/compare" element={<CompareListings />} />
+                        </Routes>
+                    </SystemCheck>
+                </BrowserRouter>
+            </CompareProvider>
         </AuthProvider>
     )
 }

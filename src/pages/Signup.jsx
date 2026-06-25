@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
@@ -8,11 +8,16 @@ import MobileLayout from '../components/layout/MobileLayout';
 
 const Signup = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const initialRole = location.state?.initialRole || 'user';
+    
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [passwordConfirm, setPasswordConfirm] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
     const [name, setName] = useState('');
-    const [role, setRole] = useState('user'); // Default 'user'
+    const [role, setRole] = useState(initialRole); // Use initialRole from location state
     
     // Agent specific fields
     const [officeName, setOfficeName] = useState('');
@@ -20,6 +25,7 @@ const Signup = () => {
     const [registrationNumber, setRegistrationNumber] = useState('');
     const [officeAddress, setOfficeAddress] = useState('');
     const [detailAddress, setDetailAddress] = useState('');
+    const [kakaoOpenChatUrl, setKakaoOpenChatUrl] = useState('');
     const [showPostcode, setShowPostcode] = useState(false);
     
     const [agreed, setAgreed] = useState(false);
@@ -89,7 +95,8 @@ const Signup = () => {
                     representativeName: name.trim(), // Name field doubles as representative name
                     officePhone: phoneNumber.trim(), // Storing as officePhone to match ListingDetail's expectations
                     registrationNumber: registrationNumber.trim(),
-                    officeAddress: fullOfficeAddress
+                    officeAddress: fullOfficeAddress,
+                    kakaoOpenChatUrl: kakaoOpenChatUrl.trim()
                 };
             }
 
@@ -168,27 +175,45 @@ const Signup = () => {
                             placeholder="example@email.com"
                         />
                     </div>
-                    <div>
+                    <div className="relative">
                         <label className="block text-sm font-bold mb-1">비밀번호</label>
-                        <input
-                            type="password"
-                            className="w-full p-3 border border-gray-200 rounded-lg outline-none focus:border-market-orange"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            placeholder="6자리 이상 입력해주세요"
-                        />
+                        <div className="relative">
+                            <input
+                                type={showPassword ? "text" : "password"}
+                                className="w-full p-3 pr-10 border border-gray-200 rounded-lg outline-none focus:border-market-orange"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                placeholder="6자리 이상 입력해주세요"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                            >
+                                {showPassword ? '👁️‍🗨️' : '👁️'}
+                            </button>
+                        </div>
                     </div>
-                    <div>
+                    <div className="relative">
                         <label className="block text-sm font-bold mb-1">비밀번호 확인</label>
-                        <input
-                            type="password"
-                            className="w-full p-3 border border-gray-200 rounded-lg outline-none focus:border-market-orange"
-                            value={passwordConfirm}
-                            onChange={(e) => setPasswordConfirm(e.target.value)}
-                            required
-                            placeholder="비밀번호를 다시 입력해주세요"
-                        />
+                        <div className="relative">
+                            <input
+                                type={showPasswordConfirm ? "text" : "password"}
+                                className="w-full p-3 pr-10 border border-gray-200 rounded-lg outline-none focus:border-market-orange"
+                                value={passwordConfirm}
+                                onChange={(e) => setPasswordConfirm(e.target.value)}
+                                required
+                                placeholder="비밀번호를 다시 입력해주세요"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                            >
+                                {showPasswordConfirm ? '👁️‍🗨️' : '👁️'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Agent Specific Fields */}
@@ -253,6 +278,16 @@ const Signup = () => {
                                     value={detailAddress}
                                     onChange={(e) => setDetailAddress(e.target.value)}
                                     placeholder="상세 주소를 입력해주세요 (동, 호수 등)"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold mb-1">카카오톡 오픈채팅 URL (선택)</label>
+                                <input
+                                    type="url"
+                                    className="w-full p-3 border border-gray-200 rounded-lg outline-none focus:border-market-orange bg-orange-50/30 text-sm"
+                                    value={kakaoOpenChatUrl}
+                                    onChange={(e) => setKakaoOpenChatUrl(e.target.value)}
+                                    placeholder="https://open.kakao.com/o/..."
                                 />
                             </div>
                         </div>
