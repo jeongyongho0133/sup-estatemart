@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCompare } from '../contexts/CompareContext';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, addDoc, getDocs, increment, updateDoc } from 'firebase/firestore';
+import { logListingEvent } from '../utils/analytics';
 
 const ListingDetail = () => {
     const { id } = useParams();
@@ -44,6 +45,8 @@ const ListingDetail = () => {
                     }
                     // Fetch Similar Listings (Hybrid)
                     fetchSimilarListings(lData);
+                    // Update View Count and Log Event
+                    updateViewCount(lData.id, lData.userId);
                 } else {
                     alert('매물을 찾을 수 없습니다.');
                     navigate('/');
@@ -110,12 +113,16 @@ const ListingDetail = () => {
             }
         };
 
-        const updateViewCount = async () => {
+        const updateViewCount = async (listingId, sellerId) => {
             try {
-                const docRef = doc(db, 'listings', id);
+                const docRef = doc(db, 'listings', listingId);
                 await updateDoc(docRef, {
                     viewCount: increment(1)
                 });
+                // 본인 매물이 아닌 경우 조회수 통계 로깅
+                if (currentUser?.uid !== sellerId) {
+                    await logListingEvent(listingId, sellerId, 'views');
+                }
             } catch (error) {
                 console.error("Error updating view count:", error);
             }
@@ -123,7 +130,6 @@ const ListingDetail = () => {
 
         fetchListing();
         checkLikeStatus();
-        updateViewCount();
     }, [id, navigate, currentUser]);
 
     // Handle dynamic geocoding if coordinates are missing
@@ -178,6 +184,10 @@ const ListingDetail = () => {
                 });
                 setIsLiked(true);
                 alert('관심 목록에 추가되었습니다.');
+                // 본인 매물이 아닌 경우 찜 관심 통계 로깅
+                if (currentUser?.uid !== listing.userId) {
+                    await logListingEvent(id, listing.userId, 'likes');
+                }
             }
         } catch (error) {
             console.error("Error toggling like:", error);
@@ -233,12 +243,33 @@ const ListingDetail = () => {
                     }
                 });
                 chatRoomId = newChatRef.id;
+                // 본인 매물이 아닌 경우 신규 채팅방 생성 통계 로깅
+                if (currentUser?.uid !== listing.userId) {
+                    await logListingEvent(id, listing.userId, 'chats');
+                }
             }
 
             navigate(`/chat/${chatRoomId}`);
         } catch (error) {
             console.error("Error creating/navigating to chat:", error);
             alert("채팅방 연결에 실패했습니다.");
+        }
+    };
+
+    const handleInquiry = async (type, targetUrl) => {
+        try {
+            // 본인 매물이 아닌 경우 문의 통계 로깅
+            if (currentUser?.uid !== listing.userId) {
+                await logListingEvent(id, listing.userId, 'inquiries');
+            }
+        } catch (error) {
+            console.error("Error logging inquiry event:", error);
+        }
+
+        if (type === 'tel' || type === 'sms') {
+            window.location.href = targetUrl;
+        } else if (type === 'kakao') {
+            window.open(targetUrl, '_blank');
         }
     };
 
@@ -530,6 +561,58 @@ const ListingDetail = () => {
                     </div>
                 )}
 
+                {/* AI Registry Safety Report */}
+                {listing.safetyReport && (
+                    <div className="mb-6 bg-white border border-gray-100 p-4 rounded-xl shadow-sm mt-4">
+                        <div className="flex items-center space-x-1.5 mb-3">
+                            <span className="text-base">🛡️</span>
+                            <h3 className="font-bold text-sm text-gray-800">AI 안심 거래 등기 권리 분석</h3>
+                            <span className="text-[10px] text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded font-black">
+                                VERIFIED
+                            </span>
+                        </div>
+                        
+                        <div className={`p-4 rounded-xl border ${
+                            listing.safetyReport.safetyGrade === '안전' ? 'bg-green-50/40 border-green-200 text-green-800' :
+                            listing.safetyReport.safetyGrade === '보통' ? 'bg-blue-50/40 border-blue-200 text-blue-800' :
+                            listing.safetyReport.safetyGrade === '주의' ? 'bg-yellow-50/40 border-yellow-200 text-yellow-800' :
+                            'bg-red-50/40 border-red-200 text-red-800'
+                        } space-y-3`}>
+                            <div className="flex items-center justify-between border-b pb-2.5 border-black/5">
+                                <span className="text-xs font-bold text-gray-500">종합 안전 등급</span>
+                                <span className={`text-xs font-black px-3 py-1 rounded-full ${
+                                    listing.safetyReport.safetyGrade === '안전' ? 'bg-green-100 text-green-700' :
+                                    listing.safetyReport.safetyGrade === '보통' ? 'bg-blue-100 text-blue-700' :
+                                    listing.safetyReport.safetyGrade === '주의' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
+                                }`}>
+                                    {listing.safetyReport.safetyGrade}
+                                </span>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3 text-xs leading-relaxed">
+                                <div className="bg-white/80 p-2.5 rounded-lg border border-black/5">
+                                    <p className="text-[10px] text-gray-400 font-bold block mb-0.5">을구 근저당 금액</p>
+                                    <span className="font-extrabold text-gray-900 text-sm">
+                                        {listing.safetyReport.mortgageAmount ? `${listing.safetyReport.mortgageAmount.toLocaleString()}만원` : '없음(0원)'}
+                                    </span>
+                                </div>
+                                <div className="bg-white/80 p-2.5 rounded-lg border border-black/5">
+                                    <p className="text-[10px] text-gray-400 font-bold block mb-0.5">압류/가압류 여부</p>
+                                    <span className="font-extrabold text-gray-900 text-sm">
+                                        {listing.safetyReport.hasSeizure ? '발견됨 ⚠️' : '발견되지 않음 ✅'}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div className="text-xs text-gray-700 font-medium leading-relaxed bg-white/50 p-3 rounded-lg border border-black/5 pt-2.5 mt-2">
+                                <span className="text-[10px] text-purple-600 font-black block mb-1">AI 분석 의견 요약</span>
+                                {listing.safetyReport.summary}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Manual Description */}
                 {listing.manualDescription && (
                     <div className="mb-6">
@@ -627,15 +710,21 @@ const ListingDetail = () => {
                                         <div className="flex"><span className="text-gray-500 w-16">등록번호:</span><span>{regNum}</span></div>
                                         <div className="flex items-center">
                                             <span className="text-gray-500 w-16">사무실:</span>
-                                            <a href={`tel:${officePhone.replace(/[^0-9]/g, '')}`} className="text-blue-600 font-bold hover:underline flex items-center">
+                                            <button
+                                                onClick={() => handleInquiry('tel', `tel:${officePhone.replace(/[^0-9]/g, '')}`)}
+                                                className="text-blue-600 font-bold hover:underline flex items-center bg-transparent border-none p-0 cursor-pointer outline-none"
+                                            >
                                                 📞 {officePhone}
-                                            </a>
+                                            </button>
                                         </div>
                                         <div className="flex items-center">
                                             <span className="text-gray-500 w-16">휴대폰:</span>
-                                            <a href={`tel:${cellPhone.replace(/[^0-9]/g, '')}`} className="text-blue-600 font-bold hover:underline flex items-center">
+                                            <button
+                                                onClick={() => handleInquiry('tel', `tel:${cellPhone.replace(/[^0-9]/g, '')}`)}
+                                                className="text-blue-600 font-bold hover:underline flex items-center bg-transparent border-none p-0 cursor-pointer outline-none"
+                                            >
                                                 📱 {cellPhone}
-                                            </a>
+                                            </button>
                                         </div>
                                         <div className="flex items-start">
                                             <span className="text-gray-500 w-16">주소:</span>
@@ -647,17 +736,20 @@ const ListingDetail = () => {
 
                                     {/* Action Buttons */}
                                     <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-gray-200">
-                                        <a href={`sms:${cellPhone.replace(/[^0-9]/g, '')}?body=${encodeURIComponent(`[${officeName}] 매물번호 [${listing.listingRegNumber || '발급 대기'}] "${listing.title}" 문의합니다.`)}`} className="flex items-center justify-center space-x-2 py-2.5 bg-gray-800 text-white rounded-lg font-bold hover:bg-black transition shadow-sm">
+                                        <button
+                                            onClick={() => handleInquiry('sms', `sms:${cellPhone.replace(/[^0-9]/g, '')}?body=${encodeURIComponent(`[${officeName}] 매물번호 [${listing.listingRegNumber || '발급 대기'}] "${listing.title}" 문의합니다.`)}`)}
+                                            className="flex items-center justify-center space-x-2 py-2.5 bg-gray-800 text-white rounded-lg font-bold hover:bg-black transition shadow-sm outline-none"
+                                        >
                                             <span>💬</span>
                                             <span>물건 문자 보내기</span>
-                                        </a>
+                                        </button>
                                         <button onClick={() => {
                                             if (listing.brokerInfo?.kakaoOpenChatUrl) {
-                                                window.open(listing.brokerInfo.kakaoOpenChatUrl, '_blank');
+                                                handleInquiry('kakao', listing.brokerInfo.kakaoOpenChatUrl);
                                             } else {
                                                 alert("등록된 카카오톡 오픈채팅 링크가 없습니다.");
                                             }
-                                        }} className="flex items-center justify-center space-x-2 py-2.5 bg-[#FEE500] text-[#000000] rounded-lg font-bold hover:bg-[#F4DC00] transition shadow-sm">
+                                        }} className="flex items-center justify-center space-x-2 py-2.5 bg-[#FEE500] text-[#000000] rounded-lg font-bold hover:bg-[#F4DC00] transition shadow-sm outline-none">
                                             <span className="font-black">TALK</span>
                                             <span>카카오톡 물건문의</span>
                                         </button>

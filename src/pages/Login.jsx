@@ -59,7 +59,7 @@ const Login = () => {
 
     const handleLoginError = (error) => {
         console.error("Login failed:", error);
-        
+
         if (error.code === 'auth/invalid-credential') {
             if (loginRole === 'agent') {
                 setShowAgentSignupPopup(true);
@@ -100,7 +100,9 @@ const Login = () => {
                     <h1 className="text-2xl font-black text-gray-900 mb-2">환영합니다!</h1>
                     <p className="text-sm text-gray-500 leading-relaxed">
                         {loginRole === 'user' ? (
-                            <>동네 이웃과 거래하는<br /><span className="text-market-orange font-bold">부동산 직거래 마켓</span></>
+                            <>우리
+
+                                동네 이웃과 거래하는<br /><span className="text-market-orange font-bold">부동산 직거래 마켓</span></>
                         ) : (
                             <>공인중개사를 위한<br /><span className="text-indigo-600 font-bold">전문 비즈니스 파트너</span></>
                         )}
@@ -209,9 +211,9 @@ const Login = () => {
                             </div>
                             <h3 className="text-xl font-black text-gray-900 mb-2">공인중개사 회원가입 안내</h3>
                             <p className="text-sm text-gray-500 leading-relaxed">
-                                이메일 또는 비밀번호가 일치하지 않거나, <br/>아직 가입되지 않은 계정입니다.
-                                <br/><br/>
-                                처음 오셨다면 <span className="text-indigo-600 font-bold">공인중개사 회원가입</span>을 통해<br/>다양한 비즈니스 혜택을 누려보세요!
+                                이메일 또는 비밀번호가 일치하지 않거나, <br />아직 가입되지 않은 계정입니다.
+                                <br /><br />
+                                처음 오셨다면 <span className="text-indigo-600 font-bold">공인중개사 회원가입</span>을 통해<br />다양한 비즈니스 혜택을 누려보세요!
                             </p>
                         </div>
                         <div className="flex flex-col gap-3">

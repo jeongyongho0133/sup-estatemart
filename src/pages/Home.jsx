@@ -562,16 +562,22 @@ const Home = () => {
                 <div className="fixed inset-0 z-50 flex justify-end">
                     <div className="fixed inset-0 bg-black/30" onClick={() => setShowMenu(false)}></div>
                     <div className="relative w-64 h-full bg-white shadow-2xl p-6 flex flex-col space-y-4 animate-slide-in-right">
-                        <div className="text-xl font-bold mb-4">전체 메뉴</div>
+                        <div className='text-xl font-bold mb-4'>{'전체 메뉴'}</div>
+                        <button
+                            onClick={() => { navigate('/about'); setShowMenu(false); }}
+                            className='text-left py-2 border-b border-gray-100 hover:text-market-orange font-bold text-market-orange'
+                        >
+                            {'회사소개 🏢'}
+                        </button>
                         <button
                             onClick={() => { navigate('/notice'); setShowMenu(false); }}
-                            className="text-left py-2 border-b border-gray-100 hover:text-market-orange"
+                            className='text-left py-2 border-b border-gray-100 hover:text-market-orange'
                         >
-                            공지사항
+                            {'공지사항'}
                         </button>
-                        <button className="text-left py-2 border-b border-gray-100 hover:text-market-orange">자주 묻는 질문</button>
-                        <button className="text-left py-2 border-b border-gray-100 hover:text-market-orange">약관 및 정책</button>
-                        <button className="text-left py-2 border-b border-gray-100 hover:text-market-orange" onClick={() => navigate('/admin')}>관리자 페이지</button>
+                        <button className='text-left py-2 border-b border-gray-100 hover:text-market-orange'>{'자주 묻는 질문'}</button>
+                        <button className='text-left py-2 border-b border-gray-100 hover:text-market-orange'>{'약관 및 정책'}</button>
+                        <button className='text-left py-2 border-b border-gray-100 hover:text-market-orange' onClick={() => navigate('/admin')}>{'관리자 페이지'}</button>
 
                         {currentUser && (
                             <button

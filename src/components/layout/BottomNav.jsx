@@ -10,7 +10,7 @@ const BottomNav = () => {
         { id: 'chat', label: '채팅', path: '/chats', icon: '💬' },
         { id: 'write', label: '매물등록', path: '/write', icon: '➕' }, // Special highlight usually
         { id: 'alert', label: '알림', path: '/alerts', icon: '🔔' },
-        { id: 'profile', label: '나의집터', path: '/profile', icon: '👤' },
+        { id: 'profile', label: '나의 집터나라', path: '/profile', icon: '👤' },
     ];
 
     return (

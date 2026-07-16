@@ -55,17 +55,8 @@ const ListingCard = ({ listing }) => {
             return listing.location ? (listing.location.split(' ').slice(0, 3).join(' ')) : '';
         }
 
-        const { sido, sigungu, eupmyeondong, ri, roadAddress, jibunAddress, detailAddress, exposure } = listing.address;
-        const base = `${sido} ${sigungu} ${eupmyeondong || ''} ${ri || ''}`.trim();
-
-        if (exposure !== 'full') return base;
-
-        const building = listing.propertySpecs?.buildingName ? ` (${listing.propertySpecs.buildingName})` : '';
-        const road = roadAddress ? `${roadAddress}${building}` : '';
-        const jibun = (jibunAddress || detailAddress) ? `${jibunAddress || detailAddress}${building}` : '';
-
-        // For list cards, keep it concise but prioritized
-        return road || jibun || base;
+        const { sido, sigungu, eupmyeondong, ri } = listing.address;
+        return `${sido} ${sigungu} ${eupmyeondong || ''} ${ri || ''}`.replace(/\s+/g, ' ').trim();
     })();
 
     return (

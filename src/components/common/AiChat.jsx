@@ -4,7 +4,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 const AiChat = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([
-        { role: 'assistant', text: '안녕하세요! EstateMartet AI 상담사입니다. 무엇을 도와드릴까요?' }
+        { role: 'assistant', text: '안녕하세요! 집터로 jib teo ro AI 상담사입니다. 무엇을 도와드릴까요?' }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -61,7 +61,7 @@ const AiChat = () => {
         return (
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-20 right-4 w-16 h-16 bg-market-orange text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 group"
+                className="fixed bottom-40 right-4 w-16 h-16 bg-market-orange text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 group"
             >
                 <div className="absolute inset-0 w-full h-full animate-spin-slow">
                     <svg className="w-full h-full" viewBox="0 0 100 100">
@@ -72,7 +72,7 @@ const AiChat = () => {
                         />
                         <text className="text-[11px] font-black fill-white/90">
                             <textPath xlinkHref="#circlePath" startOffset="0%">
-                                AI 상담사 • AI 상담사 • 
+                                AI 상담사 • AI 상담사 •
                             </textPath>
                         </text>
                     </svg>
@@ -83,7 +83,7 @@ const AiChat = () => {
     }
 
     return (
-        <div className="fixed bottom-20 right-4 w-80 h-[500px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-100 font-sans">
+        <div className="fixed bottom-40 right-4 w-80 h-[500px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-100 font-sans">
             {/* Header */}
             <div className="bg-market-orange p-4 flex justify-between items-center text-white">
                 <div className="flex items-center space-x-2">
@@ -100,8 +100,8 @@ const AiChat = () => {
                 {messages.map((msg, idx) => (
                     <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
-                                ? 'bg-market-orange text-white rounded-tr-none'
-                                : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none shadow-sm'
+                            ? 'bg-market-orange text-white rounded-tr-none'
+                            : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none shadow-sm'
                             }`}>
                             {msg.text}
                         </div>

@@ -1,28 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
 
-const FAQ_DATA = [
-    {
-        q: "매물 등록은 어떻게 하나요?",
-        a: "로그인 후 하단 '매물' 탭에서 '매물 등록' 버튼을 통해 등록할 수 있습니다. 중개사 회원으로 인증된 경우 '인증 매물' 배지가 부여됩니다."
-    },
-    {
-        q: "중개사 인증은 필수인가요?",
-        a: "필수는 아니지만, 인증된 중개사가 등록한 매물은 사용자들에게 더 높은 신뢰를 주며 '인증 매물' 배지가 표시되어 노출 효과가 높습니다."
-    },
-    {
-        q: "허위 매물을 발견하면 어떻게 하나요?",
-        a: "매물 상세 페이지 우측 상단의 '신고' 버튼을 눌러 신고해 주세요. 관리자 검토 후 해당 매물은 즉시 조치됩니다."
-    },
-    {
-        q: "비밀번호를 잊어버렸어요.",
-        a: "로그인 페이지의 '비밀번호 찾기' 기능을 이용하시거나, 문의해 주시면 본인 확인 후 초기화를 도와드립니다."
-    }
-];
+// FAQ data is now fetched from Firestore
 
 const Support = () => {
     const navigate = useNavigate();
@@ -30,6 +13,23 @@ const Support = () => {
     const [inquiries, setInquiries] = useState([]);
     const [activeTab, setActiveTab] = useState('faq'); // faq, my-inquiries
     const [openFaq, setOpenFaq] = useState(null);
+    const [faqs, setFaqs] = useState([]);
+    const [loadingFaqs, setLoadingFaqs] = useState(true);
+
+    useEffect(() => {
+        const fetchFaqs = async () => {
+            try {
+                const q = query(collection(db, "faq"), orderBy("createdAt", "desc"));
+                const snapshot = await getDocs(q);
+                setFaqs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            } catch (error) {
+                console.error("Error fetching FAQs:", error);
+            } finally {
+                setLoadingFaqs(false);
+            }
+        };
+        fetchFaqs();
+    }, []);
 
     useEffect(() => {
         if (!currentUser || activeTab !== 'my-inquiries') return;
@@ -84,22 +84,28 @@ const Support = () => {
             <div className="p-4 pb-24">
                 {activeTab === 'faq' ? (
                     <div className="space-y-3">
-                        {FAQ_DATA.map((item, idx) => (
-                            <div key={idx} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-                                <button
-                                    onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
-                                    className="w-full px-5 py-4 flex justify-between items-center text-left"
-                                >
-                                    <span className="font-bold text-sm text-gray-700">Q. {item.q}</span>
-                                    <span className={`text-gray-400 transition-transform ${openFaq === idx ? 'rotate-180' : ''}`}>▼</span>
-                                </button>
-                                {openFaq === idx && (
-                                    <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 text-sm text-gray-600 leading-relaxed">
-                                        {item.a}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                        {loadingFaqs ? (
+                            <div className="text-center py-10 text-gray-400">로딩중...</div>
+                        ) : faqs.length === 0 ? (
+                            <div className="text-center py-10 text-gray-400">등록된 자주 묻는 질문이 없습니다.</div>
+                        ) : (
+                            faqs.map((item, idx) => (
+                                <div key={idx} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                                    <button
+                                        onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                                        className="w-full px-5 py-4 flex justify-between items-center text-left"
+                                    >
+                                        <span className="font-bold text-sm text-gray-700">Q. {item.title}</span>
+                                        <span className={`text-gray-400 transition-transform ${openFaq === idx ? 'rotate-180' : ''}`}>▼</span>
+                                    </button>
+                                    {openFaq === idx && (
+                                        <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                                            {item.content}
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
                         <div className="mt-8 pt-8 border-t text-center">
                             <p className="text-gray-400 text-sm mb-4">원하시는 답변을 찾지 못하셨나요?</p>
                             <button

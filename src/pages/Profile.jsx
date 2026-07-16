@@ -106,6 +106,75 @@ const Profile = () => {
         loadAll();
     }, [currentUser]);
 
+    // 매물 통계 데이터 로딩 이펙트
+    useEffect(() => {
+        if (!currentUser || viewMode !== 'analytics') return;
+
+        const fetchStats = async () => {
+            setStatsLoading(true);
+            try {
+                // 최근 7일 날짜 목록 구하기 (YYYY-MM-DD)
+                const dates = [];
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    dates.push(`${year}-${month}-${day}`);
+                }
+
+                let q;
+                if (selectedListingFilter === 'all') {
+                    q = query(
+                        collection(db, 'listing_stats'),
+                        where('userId', '==', currentUser.uid),
+                        where('date', 'in', dates)
+                    );
+                } else {
+                    q = query(
+                        collection(db, 'listing_stats'),
+                        where('listingId', '==', selectedListingFilter),
+                        where('date', 'in', dates)
+                    );
+                }
+
+                const querySnapshot = await getDocs(q);
+                
+                // 날짜별 통계 기본 구조 초기화
+                const rawData = {};
+                dates.forEach(d => {
+                    rawData[d] = { label: d.substring(5), views: 0, likes: 0, chats: 0, inquiries: 0 };
+                });
+
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const date = data.date;
+                    if (rawData[date]) {
+                        rawData[date].views += data.views || 0;
+                        rawData[date].likes += data.likes || 0;
+                        rawData[date].chats += data.chats || 0;
+                        rawData[date].inquiries += data.inquiries || 0;
+                    }
+                });
+
+                // 날짜 정렬 순으로 배열 변환
+                const formatted = dates.map(d => ({
+                    date: d,
+                    ...rawData[d]
+                }));
+
+                setStatsData(formatted);
+            } catch (error) {
+                console.error("Error fetching listing statistics:", error);
+            } finally {
+                setStatsLoading(false);
+            }
+        };
+
+        fetchStats();
+    }, [currentUser, viewMode, selectedListingFilter]);
+
     const handleDocUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -685,6 +754,22 @@ const Profile = () => {
                         </div>
                         <span className="text-gray-300">→</span>
                     </div>
+
+                    {(role === 'broker' || role === 'agent') && (
+                        <div
+                            onClick={() => setViewMode('analytics')}
+                            className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-gray-50 transition"
+                        >
+                            <div className="flex items-center space-x-3">
+                                <span className="text-lg">📊</span>
+                                <div>
+                                    <h4 className="font-bold text-sm text-gray-700">매물 분석 통계</h4>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">최근 7일간의 매물 조회수 및 문의 추이 분석</p>
+                                </div>
+                            </div>
+                            <span className="text-gray-300">→</span>
+                        </div>
+                    )}
                 </div>
             </div>
 

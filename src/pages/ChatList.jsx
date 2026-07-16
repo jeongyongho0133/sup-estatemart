@@ -30,7 +30,7 @@ const ChatList = () => {
 
                 for (const docSnapshot of snapshot.docs) {
                     const data = docSnapshot.data();
-                    const otherUid = data.participants.find(uid => uid !== currentUser.uid);
+                    const otherUid = data.participants?.find(uid => uid !== currentUser.uid);
 
                     let otherUserData = { displayName: '알 수 없음', photoURL: null };
                     if (otherUid) {
@@ -67,7 +67,25 @@ const ChatList = () => {
         return () => unsubscribe();
     }, [currentUser]);
 
-    if (!currentUser) return null;
+    if (!currentUser) {
+        return (
+            <MobileLayout>
+                <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center border-b border-gray-100 font-bold text-lg">
+                    채팅
+                </header>
+                <div className="flex flex-col items-center justify-center py-32 text-gray-500">
+                    <div className="text-4xl mb-4">💬</div>
+                    <p className="mb-4">로그인이 필요한 서비스입니다.</p>
+                    <button 
+                        onClick={() => navigate('/login')}
+                        className="px-6 py-2 bg-market-orange text-white rounded-lg font-bold shadow-sm"
+                    >
+                        로그인하기
+                    </button>
+                </div>
+            </MobileLayout>
+        );
+    }
 
     return (
         <MobileLayout>

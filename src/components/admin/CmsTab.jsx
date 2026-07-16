@@ -53,6 +53,8 @@ const CmsTab = () => {
                 data = { ...data, imageUrl, link, isActive };
             } else if (cmsMode === 'popups') {
                 data = { ...data, title, content, imageUrl, isActive };
+            } else if (cmsMode === 'faq' || cmsMode === 'policies') {
+                data = { ...data, title, content };
             }
 
             if (editingId) {
@@ -87,6 +89,9 @@ const CmsTab = () => {
             setContent(item.content || '');
             setImageUrl(item.imageUrl || '');
             setIsActive(item.isActive !== undefined ? item.isActive : true);
+        } else if (cmsMode === 'faq' || cmsMode === 'policies') {
+            setTitle(item.title || '');
+            setContent(item.content || '');
         }
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -132,6 +137,18 @@ const CmsTab = () => {
                     className={`px-4 py-2 font-bold text-sm ${cmsMode === 'popups' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
                 >
                     팝업
+                </button>
+                <button
+                    onClick={() => setCmsMode('faq')}
+                    className={`px-4 py-2 font-bold text-sm ${cmsMode === 'faq' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                >
+                    FAQ
+                </button>
+                <button
+                    onClick={() => setCmsMode('policies')}
+                    className={`px-4 py-2 font-bold text-sm ${cmsMode === 'policies' ? 'text-market-orange border-b-2 border-market-orange' : 'text-gray-500'}`}
+                >
+                    약관/정책
                 </button>
             </div>
 
@@ -221,6 +238,26 @@ const CmsTab = () => {
                             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
                             <span>활성화 여부</span>
                         </label>
+                    </div>
+                )}
+
+                {(cmsMode === 'faq' || cmsMode === 'policies') && (
+                    <div className="space-y-3">
+                        <input
+                            type="text"
+                            placeholder={cmsMode === 'faq' ? "질문 (Q)" : "약관/정책 제목"}
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full p-2 border rounded-lg text-sm"
+                            required
+                        />
+                        <textarea
+                            placeholder={cmsMode === 'faq' ? "답변 (A)" : "약관/정책 내용"}
+                            value={content}
+                            onChange={(e) => setContent(e.target.value)}
+                            className="w-full h-48 p-2 border rounded-lg text-sm"
+                            required
+                        ></textarea>
                     </div>
                 )}
 

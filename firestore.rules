@@ -98,6 +98,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Listing Stats: read by everyone, create/update by everyone
+    match /listing_stats/{statId} {
+      allow read, write: if true;
+    }
+
     // Default: deny all other collections
     match /{document=**} {
       allow read, write: if false;
