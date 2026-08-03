@@ -19,6 +19,8 @@ const Profile = () => {
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('profile'); // 'profile' or 'likes'
     const [uploadingDoc, setUploadingDoc] = useState(false);
+    const [contracts, setContracts] = useState([]);
+    const [contractsLoading, setContractsLoading] = useState(false);
 
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [editForm, setEditForm] = useState({
@@ -174,6 +176,38 @@ const Profile = () => {
 
         fetchStats();
     }, [currentUser, viewMode, selectedListingFilter]);
+
+    // 전자계약서 목록 로드 이펙트
+    useEffect(() => {
+        if (!currentUser || viewMode !== 'contracts') return;
+
+        const fetchContracts = async () => {
+            setContractsLoading(true);
+            try {
+                const q = query(
+                    collection(db, 'contracts'),
+                    where('brokerId', '==', currentUser.uid)
+                );
+                const querySnapshot = await getDocs(q);
+                const items = [];
+                querySnapshot.forEach((docSnap) => {
+                    items.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                items.sort((a, b) => {
+                    const timeA = a.createdAt?.seconds || 0;
+                    const timeB = b.createdAt?.seconds || 0;
+                    return timeB - timeA;
+                });
+                setContracts(items);
+            } catch (error) {
+                console.error('Error fetching contracts:', error);
+            } finally {
+                setContractsLoading(false);
+            }
+        };
+
+        fetchContracts();
+    }, [currentUser, viewMode]);
 
     const handleDocUpload = async (e) => {
         const file = e.target.files[0];
@@ -379,6 +413,66 @@ const Profile = () => {
                     >
                         로그인하러 가기
                     </button>
+                </div>
+            </MobileLayout>
+        );
+    }
+
+    if (viewMode === 'contracts') {
+        return (
+            <MobileLayout>
+                <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
+                    <button onClick={() => setViewMode('profile')} className="text-2xl mr-4">←</button>
+                    <div className="flex-1 text-center">전자계약서 보관함</div>
+                    <div className="w-8"></div>
+                </header>
+                <div className="p-4 pb-20 space-y-4">
+                    {contractsLoading ? (
+                        <div className="text-center py-10 text-gray-400">로딩중...</div>
+                    ) : contracts.length === 0 ? (
+                        <div className="text-center py-20 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                            <span className="text-3xl block mb-2">📄</span>
+                            보관된 전자계약서가 없습니다.
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {contracts.map(contract => (
+                                <div key={contract.id} className="bg-white border border-gray-150 rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-3">
+                                    <div>
+                                        <div className="flex items-center justify-between">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${contract.contractType === 'lease' ? 'bg-orange-50 text-market-orange' : 'bg-blue-50 text-blue-600'}`}>
+                                                {contract.contractType === 'lease' ? '임대차계약' : '매매계약'}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400">
+                                                {contract.createdAt ? new Date(contract.createdAt.seconds * 1000).toLocaleDateString() : ''}
+                                            </span>
+                                        </div>
+                                        <h4 className="font-bold text-sm mt-2 text-gray-800 line-clamp-1">
+                                            {contract.listingTitle || '매물 정보 없음'}
+                                        </h4>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            📍 {contract.propertyAddress || '주소 정보 없음'}
+                                        </p>
+                                        <div className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg flex justify-between">
+                                            <span>당사자: {contract.landlordName || '-'} (임대인/매도인)</span>
+                                            <span className="text-gray-300">|</span>
+                                            <span>{contract.tenantName || '-'} (임차인/매수인)</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex space-x-2 pt-2 border-t border-gray-100">
+                                        <a
+                                            href={contract.pdfUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="flex-1 py-2.5 bg-gray-800 hover:bg-black text-white text-center text-xs font-bold rounded-xl shadow-sm transition"
+                                        >
+                                            계약서 PDF 보기 🔎
+                                        </a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </MobileLayout>
         );
@@ -756,19 +850,35 @@ const Profile = () => {
                     </div>
 
                     {(role === 'broker' || role === 'agent') && (
-                        <div
-                            onClick={() => setViewMode('analytics')}
-                            className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-gray-50 transition"
-                        >
-                            <div className="flex items-center space-x-3">
-                                <span className="text-lg">📊</span>
-                                <div>
-                                    <h4 className="font-bold text-sm text-gray-700">매물 분석 통계</h4>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">최근 7일간의 매물 조회수 및 문의 추이 분석</p>
+                        <>
+                            <div
+                                onClick={() => setViewMode('analytics')}
+                                className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-gray-50 transition"
+                            >
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-lg">📊</span>
+                                    <div>
+                                        <h4 className="font-bold text-sm text-gray-700">매물 분석 통계</h4>
+                                        <p className="text-[10px] text-gray-400 mt-0.5">최근 7일간의 매물 조회수 및 문의 추이 분석</p>
+                                    </div>
                                 </div>
+                                <span className="text-gray-300">→</span>
                             </div>
-                            <span className="text-gray-300">→</span>
-                        </div>
+
+                            <div
+                                onClick={() => setViewMode('contracts')}
+                                className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-gray-50 transition animate-in fade-in"
+                            >
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-lg">📄</span>
+                                    <div>
+                                        <h4 className="font-bold text-sm text-gray-700">전자계약서 보관함</h4>
+                                        <p className="text-[10px] text-gray-400 mt-0.5">작성 완료 및 서버에 보관된 계약서 관리</p>
+                                    </div>
+                                </div>
+                                <span className="text-gray-300">→</span>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>
@@ -858,6 +968,17 @@ const Profile = () => {
                                         삭제
                                     </button>
                                 </div>
+                                {(role === 'broker' || role === 'agent') && (
+                                    <div className="border-t border-gray-100 bg-gray-50/50">
+                                        <button
+                                            onClick={() => navigate(`/contract/${item.id}`)}
+                                            className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
+                                        >
+                                            <span>📄</span>
+                                            <span>전자계약서 초안 작성하기</span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -917,6 +1038,17 @@ const Profile = () => {
                                             삭제
                                         </button>
                                     </div>
+                                    {(role === 'broker' || role === 'agent') && (
+                                        <div className="border-t border-gray-200 bg-gray-50/50">
+                                            <button
+                                                onClick={() => navigate(`/contract/${item.id}`)}
+                                                className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
+                                            >
+                                                <span>📄</span>
+                                                <span>전자계약서 초안 작성하기</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

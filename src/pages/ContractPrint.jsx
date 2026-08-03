@@ -5,9 +5,11 @@ import jsPDF from 'jspdf';
 import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useAuth } from '../contexts/AuthContext';
 
 const ContractPrint = () => {
     const navigate = useNavigate();
+    const { currentUser } = useAuth();
     const [data, setData] = useState(null);
     const [uploading, setUploading] = useState(false);
 
@@ -72,6 +74,9 @@ const ContractPrint = () => {
 
             await addDoc(collection(db, 'contracts'), {
                 listingId,
+                brokerId: data.brokerId || currentUser?.uid || '',
+                listingTitle: property.buildingName ? (property.address + ' ' + property.buildingName) : property.address,
+                propertyAddress: property.address,
                 contractType,
                 landlordName: landlord.name,
                 tenantName: tenant.name,

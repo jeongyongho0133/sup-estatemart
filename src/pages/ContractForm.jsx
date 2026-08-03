@@ -9,7 +9,7 @@ import SignaturePad from '../components/common/SignaturePad';
 const ContractForm = () => {
     const { listingId } = useParams();
     const navigate = useNavigate();
-    const { userData } = useAuth();
+    const { userData, currentUser } = useAuth();
 
     const [listing, setListing] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -120,6 +120,7 @@ const ContractForm = () => {
 
         const contractData = {
             listingId,
+            brokerId: currentUser?.uid || '',
             contractType,
             property: {
                 address: listing.location,

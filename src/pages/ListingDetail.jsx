@@ -17,7 +17,7 @@ import { logListingEvent } from '../utils/analytics';
 const ListingDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { currentUser } = useAuth();
+    const { currentUser, userData } = useAuth();
     const { addToCompare, removeFromCompare, isCompared } = useCompare();
     const [listing, setListing] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -836,15 +836,25 @@ const ListingDetail = () => {
                     </div>
 
                     {currentUser && currentUser.uid === listing.userId ? (
-                        listing.status === 'sold' ? (
-                            <button disabled className="flex-1 bg-gray-300 text-gray-500 font-bold rounded-lg py-3 cursor-not-allowed text-sm">
-                                이미 거래 완료됨
-                            </button>
-                        ) : (
-                            <button onClick={handleMarkAsSold} className="flex-1 bg-gray-900 text-white font-bold rounded-lg py-3 hover:bg-black transition text-sm">
-                                거래 완료 처리
-                            </button>
-                        )
+                        <div className="flex-1 flex space-x-1.5">
+                            {(userData?.role === 'broker' || userData?.role === 'agent') && (
+                                <button
+                                    onClick={() => navigate(`/contract/${id}`)}
+                                    className="flex-1 bg-indigo-600 text-white font-bold rounded-lg py-3 hover:bg-indigo-700 transition text-xs"
+                                >
+                                    계약서 작성 📄
+                                </button>
+                            )}
+                            {listing.status === 'sold' ? (
+                                <button disabled className="flex-1 bg-gray-300 text-gray-500 font-bold rounded-lg py-3 cursor-not-allowed text-xs">
+                                    거래 완료됨
+                                </button>
+                            ) : (
+                                <button onClick={handleMarkAsSold} className="flex-1 bg-gray-900 text-white font-bold rounded-lg py-3 hover:bg-black transition text-xs">
+                                    거래완료 처리
+                                </button>
+                            )}
+                        </div>
                     ) : (
                         listing.status === 'sold' ? (
                             <button disabled className="flex-1 bg-gray-300 text-gray-500 font-bold rounded-lg py-3 cursor-not-allowed text-sm">
