@@ -652,6 +652,12 @@ const ListingDetail = () => {
                                 카카오
                             </button>
                             <button
+                                onClick={() => setMapProvider('actualPrice')}
+                                className={`text-[10px] px-2 py-1 rounded transition ${mapProvider === 'actualPrice' ? 'bg-white shadow-sm text-market-orange font-bold' : 'text-gray-400'}`}
+                            >
+                                실거래가
+                            </button>
+                            <button
                                 onClick={() => setMapProvider('naver')}
                                 className={`text-[10px] px-2 py-1 rounded transition ${mapProvider === 'naver' ? 'bg-white shadow-sm text-market-orange font-bold' : 'text-gray-400'}`}
                             >
@@ -673,6 +679,7 @@ const ListingDetail = () => {
                     </div>
                     <div className="w-full h-48 rounded-lg overflow-hidden border border-gray-100 relative">
                         {mapProvider === 'kakao' && <KakaoMap lat={mapLat} lng={mapLng} />}
+                        {mapProvider === 'actualPrice' && <KakaoMap lat={mapLat} lng={mapLng} showActualPrice={true} listing={listing} />}
                         {mapProvider === 'naver' && <NaverMap lat={mapLat} lng={mapLng} />}
                         {mapProvider === 'google' && <GoogleMap lat={mapLat} lng={mapLng} />}
                         {mapProvider === 'roadview' && <KakaoRoadview lat={mapLat} lng={mapLng} />}
