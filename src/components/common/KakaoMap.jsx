@@ -104,13 +104,44 @@ const KakaoMap = ({ lat, lng, listings = [], onMarkerClick, showActualPrice = fa
                                     window.currentActualPricePopup.setMap(null);
                                 }
 
+                                // 평수 및 평당가(3.3㎡당가) 연산
+                                const areaNum = parseFloat(item.area) || 0;
+                                const pyeong = areaNum > 0 ? (Math.round(areaNum * 0.3025 * 10) / 10).toFixed(1) : '0.0';
+
+                                let calculatedPrice = 0;
+                                if (item.transactionType === '월세') {
+                                    calculatedPrice = (Number(item.deposit) || 0) + ((Number(item.monthlyRent) || 0) * 100);
+                                } else if (item.transactionType === '전세') {
+                                    calculatedPrice = Number(item.deposit) || 0;
+                                } else {
+                                    calculatedPrice = Number(item.price) || 0;
+                                }
+
+                                const pyeongPriceVal = areaNum > 0 ? (calculatedPrice * 3.3) / areaNum : 0;
+
+                                const formatPyeongPrice = (amount) => {
+                                    const num = Math.round(amount);
+                                    if (num >= 10000) {
+                                        const eok = Math.floor(num / 10000);
+                                        const remainder = num % 10000;
+                                        if (remainder > 0) {
+                                            return '약 ' + eok + '억 ' + remainder.toLocaleString() + '만원';
+                                        }
+                                        return '약 ' + eok + '억원';
+                                    }
+                                    return '약 ' + num.toLocaleString() + '만원';
+                                };
+
+                                const pyeongPriceDisplay = pyeongPriceVal > 0 ? formatPyeongPrice(pyeongPriceVal) : '-';
+
                                 const popupContent = document.createElement('div');
                                 popupContent.className = 'bg-white border border-gray-200 p-3 rounded-xl shadow-xl text-xs space-y-1.5 min-w-[150px] relative animate-in fade-in duration-200 z-50';
                                 popupContent.innerHTML = `
                                     <div class="font-extrabold text-gray-900 border-b pb-1 pr-4">${item.complexName}</div>
                                     <div class="text-[10px] text-indigo-650 font-bold">${item.transactionType} 실거래가</div>
                                     <div class="font-black text-market-orange text-sm">${item.priceDisplay}</div>
-                                    <div class="text-[10px] text-gray-500 font-medium">전용 ${item.area} · ${item.floor}</div>
+                                    <div class="text-[10px] text-indigo-600 font-bold">3.3㎡당 ${pyeongPriceDisplay}</div>
+                                    <div class="text-[10px] text-gray-500 font-medium">전용 ${item.area} (${pyeong}평) · ${item.floor}</div>
                                     <div class="text-[9px] text-gray-400">계약일: ${item.contractDate}</div>
                                     <button class="absolute top-1.5 right-2 text-gray-400 hover:text-black font-black text-xs outline-none focus:outline-none" style="border:none; background:transparent; cursor:pointer;">×</button>
                                 `;
