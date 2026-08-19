@@ -22,6 +22,11 @@ const Profile = () => {
     const [contracts, setContracts] = useState([]);
     const [contractsLoading, setContractsLoading] = useState(false);
 
+    // 매물 통계 관련 상태
+    const [statsLoading, setStatsLoading] = useState(false);
+    const [statsData, setStatsData] = useState([]);
+    const [selectedListingFilter, setSelectedListingFilter] = useState('all');
+
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [editForm, setEditForm] = useState({
         displayName: '',
@@ -413,6 +418,101 @@ const Profile = () => {
                     >
                         로그인하러 가기
                     </button>
+                </div>
+            </MobileLayout>
+        );
+    }
+
+    if (viewMode === 'analytics') {
+        return (
+            <MobileLayout>
+                <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
+                    <button onClick={() => setViewMode('profile')} className="text-2xl mr-4">←</button>
+                    <div className="flex-1 text-center">매물 분석 통계</div>
+                    <div className="w-8"></div>
+                </header>
+                <div className="p-4 pb-20 space-y-6">
+                    {/* 매물 필터 선택 */}
+                    <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm space-y-2">
+                        <label className="text-xs font-bold text-gray-500 block">분석 대상 매물</label>
+                        <select
+                            value={selectedListingFilter}
+                            onChange={(e) => setSelectedListingFilter(e.target.value)}
+                            className="w-full p-3 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none bg-gray-50 font-bold text-gray-700"
+                        >
+                            <option value="all">전체 등록 매물</option>
+                            {myListings.map(item => (
+                                <option key={item.id} value={item.id}>{item.title}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* 통계 요약 카드 */}
+                    {statsLoading ? (
+                        <div className="text-center py-10 text-gray-400">통계 데이터 로딩중...</div>
+                    ) : statsData.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                            최근 7일간의 통계 데이터가 없습니다.
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl text-center">
+                                    <div className="text-[10px] text-orange-600 font-bold">누적 조회수</div>
+                                    <div className="text-2xl font-black text-market-orange mt-1">
+                                        {statsData.reduce((acc, cur) => acc + (cur.views || 0), 0).toLocaleString()}회
+                                    </div>
+                                </div>
+                                <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-center">
+                                    <div className="text-[10px] text-red-600 font-bold">누적 관심 등록</div>
+                                    <div className="text-2xl font-black text-red-500 mt-1">
+                                        {statsData.reduce((acc, cur) => acc + (cur.likes || 0), 0).toLocaleString()}건
+                                    </div>
+                                </div>
+                                <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl text-center">
+                                    <div className="text-[10px] text-blue-600 font-bold">누적 채팅 문의</div>
+                                    <div className="text-2xl font-black text-blue-600 mt-1">
+                                        {statsData.reduce((acc, cur) => acc + (cur.chats || 0), 0).toLocaleString()}건
+                                    </div>
+                                </div>
+                                <div className="bg-green-50 border border-green-100 p-4 rounded-2xl text-center">
+                                    <div className="text-[10px] text-green-600 font-bold">누적 전화/메일 문의</div>
+                                    <div className="text-2xl font-black text-green-700 mt-1">
+                                        {statsData.reduce((acc, cur) => acc + (cur.inquiries || 0), 0).toLocaleString()}건
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 일자별 상세 추이 테이블 */}
+                            <div className="bg-white border border-gray-150 rounded-2xl p-4 shadow-sm">
+                                <h4 className="font-bold text-sm text-gray-800 mb-3">일자별 상세 추이</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs text-left text-gray-500">
+                                        <thead className="text-[10px] text-gray-400 uppercase bg-gray-50 rounded-lg">
+                                            <tr>
+                                                <th className="px-3 py-2">날짜</th>
+                                                <th className="px-3 py-2 text-right">조회수</th>
+                                                <th className="px-3 py-2 text-right">관심</th>
+                                                <th className="px-3 py-2 text-right">채팅</th>
+                                                <th className="px-3 py-2 text-right">문의</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {statsData.map(item => (
+                                                <tr key={item.date} className="hover:bg-gray-50 transition">
+                                                    <td className="px-3 py-2.5 font-bold text-gray-700">{item.label}</td>
+                                                    <td className="px-3 py-2.5 text-right font-semibold text-gray-900">{item.views.toLocaleString()}</td>
+                                                    <td className="px-3 py-2.5 text-right font-semibold text-red-500">{item.likes.toLocaleString()}</td>
+                                                    <td className="px-3 py-2.5 text-right font-semibold text-blue-600">{item.chats.toLocaleString()}</td>
+                                                    <td className="px-3 py-2.5 text-right font-semibold text-green-700">{item.inquiries.toLocaleString()}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </MobileLayout>
         );
