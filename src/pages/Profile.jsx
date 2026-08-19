@@ -949,8 +949,6 @@ const Profile = () => {
                         <span className="text-gray-300">→</span>
                     </div>
 
-                    {(role === 'broker' || role === 'agent' || role === 'user') && (
-                        <>
                             <div
                                 onClick={() => setViewMode('analytics')}
                                 className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-gray-50 transition"
@@ -978,8 +976,6 @@ const Profile = () => {
                                 </div>
                                 <span className="text-gray-300">→</span>
                             </div>
-                        </>
-                    )}
                 </div>
             </div>
 
@@ -1068,17 +1064,15 @@ const Profile = () => {
                                         삭제
                                     </button>
                                 </div>
-                                {(role === 'broker' || role === 'agent' || role === 'user') && (
-                                    <div className="border-t border-gray-100 bg-gray-50/50">
-                                        <button
-                                            onClick={() => navigate(`/contract/${item.id}`)}
-                                            className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
-                                        >
-                                            <span>📄</span>
-                                            <span>전자계약서 초안 작성하기</span>
-                                        </button>
-                                    </div>
-                                )}
+                                <div className="border-t border-gray-100 bg-gray-50/50">
+                                    <button
+                                        onClick={() => navigate(`/contract/${item.id}`)}
+                                        className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
+                                    >
+                                        <span>📄</span>
+                                        <span>전자계약서 초안 작성하기</span>
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -1138,17 +1132,15 @@ const Profile = () => {
                                             삭제
                                         </button>
                                     </div>
-                                    {(role === 'broker' || role === 'agent' || role === 'user') && (
-                                        <div className="border-t border-gray-200 bg-gray-50/50">
-                                            <button
-                                                onClick={() => navigate(`/contract/${item.id}`)}
-                                                className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
-                                            >
-                                                <span>📄</span>
-                                                <span>전자계약서 초안 작성하기</span>
-                                            </button>
-                                        </div>
-                                    )}
+                                    <div className="border-t border-gray-200 bg-gray-50/50">
+                                        <button
+                                            onClick={() => navigate(`/contract/${item.id}`)}
+                                            className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
+                                        >
+                                            <span>📄</span>
+                                            <span>전자계약서 초안 작성하기</span>
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
