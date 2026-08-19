@@ -949,7 +949,7 @@ const Profile = () => {
                         <span className="text-gray-300">→</span>
                     </div>
 
-                    {(role === 'broker' || role === 'agent') && (
+                    {(role === 'broker' || role === 'agent' || role === 'user') && (
                         <>
                             <div
                                 onClick={() => setViewMode('analytics')}
@@ -1068,7 +1068,7 @@ const Profile = () => {
                                         삭제
                                     </button>
                                 </div>
-                                {(role === 'broker' || role === 'agent') && (
+                                {(role === 'broker' || role === 'agent' || role === 'user') && (
                                     <div className="border-t border-gray-100 bg-gray-50/50">
                                         <button
                                             onClick={() => navigate(`/contract/${item.id}`)}
@@ -1138,7 +1138,7 @@ const Profile = () => {
                                             삭제
                                         </button>
                                     </div>
-                                    {(role === 'broker' || role === 'agent') && (
+                                    {(role === 'broker' || role === 'agent' || role === 'user') && (
                                         <div className="border-t border-gray-200 bg-gray-50/50">
                                             <button
                                                 onClick={() => navigate(`/contract/${item.id}`)}
