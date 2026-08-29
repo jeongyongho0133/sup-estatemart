@@ -12,6 +12,33 @@ const CompareListings = () => {
         return Number(num).toLocaleString();
     };
 
+    const getPyeongPrice = (listing) => {
+        const area = parseFloat(listing.propertySpecs?.exclusiveArea);
+        if (!area || area <= 0) return '-';
+
+        let calculatedPrice = 0;
+        if (listing.transactionType === '월세') {
+            calculatedPrice = (Number(listing.deposit) || 0) + ((Number(listing.monthlyRent) || 0) * 100);
+        } else if (listing.transactionType === '전세') {
+            calculatedPrice = Number(listing.deposit) || 0;
+        } else {
+            calculatedPrice = Number(listing.price) || 0;
+        }
+
+        const pyeongPriceVal = (calculatedPrice * 3.3) / area;
+        const num = Math.round(pyeongPriceVal);
+
+        if (num >= 10000) {
+            const eok = Math.floor(num / 10000);
+            const remainder = num % 10000;
+            if (remainder > 0) {
+                return eok + '억 ' + remainder.toLocaleString() + '만';
+            }
+            return eok + '억';
+        }
+        return num.toLocaleString() + '만';
+    };
+
     if (compareList.length === 0) {
         return (
             <MobileLayout showNav={true}>
@@ -54,6 +81,7 @@ const CompareListings = () => {
                         <div className="h-10 flex items-center text-xs font-bold text-gray-500">매물명</div>
                         <div className="h-10 flex items-center text-xs font-bold text-gray-500">거래종류</div>
                         <div className="h-10 flex items-center text-xs font-bold text-gray-500">가격</div>
+                        <div className="h-10 flex items-center text-xs font-bold text-gray-500">평당가 (3.3㎡)</div>
                         <div className="h-10 flex items-center text-xs font-bold text-gray-500">관리비</div>
                         <div className="h-10 flex items-center text-xs font-bold text-gray-500">면적</div>
                         <div className="h-10 flex items-center text-xs font-bold text-gray-500">층수</div>
@@ -91,6 +119,10 @@ const CompareListings = () => {
                                 {listing.transactionType === '월세' 
                                     ? `${formatNumber(listing.deposit)} / ${formatNumber(listing.monthlyRent)}`
                                     : `${formatNumber(listing.price)}만원`}
+                            </div>
+
+                            <div className="h-10 flex items-center justify-center text-xs font-semibold px-2 text-center text-indigo-650 bg-indigo-50/30 mx-2 rounded">
+                                {getPyeongPrice(listing)}
                             </div>
 
                             <div className="h-10 flex items-center justify-center text-xs text-gray-700">
