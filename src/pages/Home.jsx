@@ -604,7 +604,7 @@ const Home = () => {
             {/* Admin Kakao Open Chat FAB */}
             <button
                 onClick={() => window.open(adminKakaoUrl, '_blank')}
-                className="fixed bottom-40 right-4 z-[90] flex items-center justify-center space-x-2 bg-[#FEE500] text-[#000000] px-4 py-3 rounded-full shadow-lg hover:bg-[#F4DC00] transition transform hover:scale-105 active:scale-95 border border-yellow-400"
+                className="fixed bottom-20 right-4 z-[90] flex items-center justify-center space-x-2 bg-[#FEE500] text-[#000000] px-4 py-3 rounded-full shadow-lg hover:bg-[#F4DC00] transition transform hover:scale-105 active:scale-95 border border-yellow-400"
             >
                 <span className="font-black text-lg leading-none">TALK</span>
                 <span className="font-bold text-sm">고객센터 문의</span>
