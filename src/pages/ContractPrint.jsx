@@ -1,27 +1,45 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { db, storage } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../contexts/AuthContext';
 
 const ContractPrint = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const contractId = searchParams.get('id');
     const { currentUser } = useAuth();
     const [data, setData] = useState(null);
     const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
-        const rawData = sessionStorage.getItem('contract_data');
-        if (rawData) {
-            setData(JSON.parse(rawData));
-        } else {
-            alert('계약서 데이터가 존재하지 않습니다.');
-            window.close();
-        }
-    }, []);
+        const loadContract = async () => {
+            if (contractId) {
+                try {
+                    const docSnap = await getDoc(doc(db, 'contracts', contractId));
+                    if (docSnap.exists()) {
+                        setData({ id: docSnap.id, ...docSnap.data() });
+                        return;
+                    }
+                } catch (err) {
+                    console.error('계약서 데이터 로드 에러:', err);
+                }
+            }
+
+            const rawData = sessionStorage.getItem('contract_data');
+            if (rawData) {
+                setData(JSON.parse(rawData));
+            } else {
+                alert('계약서 데이터가 존재하지 않습니다.');
+                window.close();
+            }
+        };
+
+        loadContract();
+    }, [contractId]);
 
     if (!data) return <div className="p-8 text-center text-gray-500">계약서를 준비 중입니다...</div>;
 
@@ -72,20 +90,33 @@ const ContractPrint = () => {
             await uploadBytes(storageRef, pdfBlob);
             const downloadUrl = await getDownloadURL(storageRef);
 
-            await addDoc(collection(db, 'contracts'), {
-                listingId,
-                brokerId: data.brokerId || currentUser?.uid || '',
-                listingTitle: property.buildingName ? (property.address + ' ' + property.buildingName) : property.address,
-                propertyAddress: property.address,
-                contractType,
-                landlordName: landlord.name,
-                tenantName: tenant.name,
-                pdfUrl: downloadUrl,
-                createdAt: serverTimestamp(),
-                status: 'completed'
-            });
+            const activeContractId = contractId || data.id;
+            if (activeContractId) {
+                await updateDoc(doc(db, 'contracts', activeContractId), {
+                    pdfUrl: downloadUrl,
+                    status: 'completed',
+                    updatedAt: serverTimestamp(),
+                    completedAt: serverTimestamp()
+                });
+            } else {
+                await addDoc(collection(db, 'contracts'), {
+                    listingId,
+                    brokerId: data.brokerId || currentUser?.uid || '',
+                    listingTitle: property.buildingName ? (property.address + ' ' + property.buildingName) : property.address,
+                    propertyAddress: property.address,
+                    contractType,
+                    landlordName: landlord.name,
+                    tenantName: tenant.name,
+                    pdfUrl: downloadUrl,
+                    createdAt: serverTimestamp(),
+                    status: 'completed'
+                });
+            }
 
-            alert('계약서가 성공적으로 서버에 보관되었습니다!');
+            // Also trigger client-side download
+            pdf.save(`부동산전자계약서_${landlord?.name || '임대인'}_${tenant?.name || '임차인'}_${timestamp}.pdf`);
+
+            alert('계약서가 성공적으로 서버에 보관되고 PDF로 다운로드되었습니다!');
             sessionStorage.removeItem('contract_data');
             
             if (window.opener) {

@@ -32,6 +32,7 @@ import CompareListings from './pages/CompareListings'
 import { CompareProvider } from './contexts/CompareContext'
 import ContractForm from './pages/ContractForm'
 import ContractPrint from './pages/ContractPrint'
+import ContractSign from './pages/ContractSign'
 
 const SystemCheck = ({ children }) => {
     const { userData, loading: authLoading } = useAuth();
@@ -98,6 +99,7 @@ function App() {
                             <Route path="/agent/:id" element={<AgentListings />} />
                             <Route path="/compare" element={<CompareListings />} />
                             <Route path="/contract/:listingId" element={<ContractForm />} />
+                            <Route path="/contract/:contractId/sign" element={<ContractSign />} />
                             <Route path="/contract/print" element={<ContractPrint />} />
                         </Routes>
                     </SystemCheck>

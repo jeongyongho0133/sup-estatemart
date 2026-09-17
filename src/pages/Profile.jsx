@@ -523,12 +523,17 @@ const Profile = () => {
             <MobileLayout>
                 <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
                     <button onClick={() => setViewMode('profile')} className="text-2xl mr-4">←</button>
-                    <div className="flex-1 text-center">전자계약서 보관함</div>
+                    <div className="flex-1 text-center font-bold">전자계약서 보관함</div>
                     <div className="w-8"></div>
                 </header>
-                <div className="p-4 pb-20 space-y-4">
+                <div className="p-4 pb-24 space-y-4">
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-900 leading-relaxed">
+                        <span className="font-bold block mb-1">💡 비대면 교차 서명 안내</span>
+                        서명이 완료되지 않은 계약서는 <strong>[서명 링크 복사]</strong> 버튼을 눌러 카카오톡 등으로 상대방에게 전달할 수 있습니다.
+                    </div>
+
                     {contractsLoading ? (
-                        <div className="text-center py-10 text-gray-400">로딩중...</div>
+                        <div className="text-center py-10 text-gray-400 font-bold">전자계약서를 불러오는 중입니다...</div>
                     ) : contracts.length === 0 ? (
                         <div className="text-center py-20 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                             <span className="text-3xl block mb-2">📄</span>
@@ -536,41 +541,119 @@ const Profile = () => {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {contracts.map(contract => (
-                                <div key={contract.id} className="bg-white border border-gray-150 rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-3">
-                                    <div>
-                                        <div className="flex items-center justify-between">
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${contract.contractType === 'lease' ? 'bg-orange-50 text-market-orange' : 'bg-blue-50 text-blue-600'}`}>
-                                                {contract.contractType === 'lease' ? '임대차계약' : '매매계약'}
-                                            </span>
-                                            <span className="text-[10px] text-gray-400">
-                                                {contract.createdAt ? new Date(contract.createdAt.seconds * 1000).toLocaleDateString() : ''}
-                                            </span>
+                            {contracts.map(contract => {
+                                const isCompleted = contract.status === 'completed';
+                                const landlordSigned = !!contract.signatures?.landlordSig;
+                                const tenantSigned = !!contract.signatures?.tenantSig;
+                                const brokerSigned = !!contract.signatures?.brokerSig;
+                                const totalRequired = contract.broker?.officeName ? 3 : 2;
+                                let signedCount = 0;
+                                if (landlordSigned) signedCount++;
+                                if (tenantSigned) signedCount++;
+                                if (brokerSigned) signedCount++;
+
+                                const handleCopyLink = (role = 'tenant') => {
+                                    const signUrl = `${window.location.origin}/contract/${contract.id}/sign?role=${role}`;
+                                    const targetName = role === 'tenant' ? (contract.tenant?.name || contract.tenantName || '고객') : (contract.landlord?.name || contract.landlordName || '고객');
+                                    const roleTitle = role === 'tenant' ? (contract.contractType === 'lease' ? '임차인' : '매수인') : (contract.contractType === 'lease' ? '임대인' : '매도인');
+                                    const propertyName = contract.listingTitle || contract.property?.buildingName || contract.propertyAddress || '부동산 계약서';
+                                    const message = `[부동산마트 전자계약]\n${targetName}님, '${propertyName}' ${roleTitle} 전자계약서 서명 요청 링크입니다.\n\n👉 서명하기: ${signUrl}`;
+
+                                    navigator.clipboard.writeText(message).then(() => {
+                                        alert(`[${roleTitle} 서명 요청 링크]가 클립보드에 복사되었습니다!\n카카오톡으로 공유해 주세요.`);
+                                    }).catch(() => {
+                                        alert('링크 복사에 실패했습니다.');
+                                    });
+                                };
+
+                                return (
+                                    <div key={contract.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-4">
+                                        <div>
+                                            <div className="flex items-center justify-between">
+                                                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${contract.contractType === 'lease' ? 'bg-orange-50 text-market-orange' : 'bg-blue-50 text-blue-600'}`}>
+                                                    {contract.contractType === 'lease' ? '주택임대차 계약' : '부동산 매매계약'}
+                                                </span>
+                                                <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
+                                                    isCompleted 
+                                                        ? 'bg-emerald-100 text-emerald-800' 
+                                                        : 'bg-amber-100 text-amber-800'
+                                                }`}>
+                                                    {isCompleted ? '체결 완료 ✓' : `서명 진행중 (${signedCount}/${totalRequired})`}
+                                                </span>
+                                            </div>
+
+                                            <h4 className="font-bold text-base mt-2.5 text-gray-900 leading-snug">
+                                                {contract.listingTitle || contract.property?.address || '매물 정보 없음'}
+                                            </h4>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                📍 {contract.propertyAddress || contract.property?.address || '-'}
+                                            </p>
+
+                                            {/* Parties Overview */}
+                                            <div className="mt-3 bg-gray-50 border border-gray-100 p-3 rounded-2xl space-y-2 text-xs">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-500 font-medium">
+                                                        {contract.contractType === 'lease' ? '임대인' : '매도인'}: {contract.landlord?.name || contract.landlordName || '-'}
+                                                    </span>
+                                                    <span className={`font-bold ${landlordSigned ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                        {landlordSigned ? '서명완료 ✓' : '서명대기 ⏳'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between border-t border-gray-100 pt-1.5">
+                                                    <span className="text-gray-500 font-medium">
+                                                        {contract.contractType === 'lease' ? '임차인' : '매수인'}: {contract.tenant?.name || contract.tenantName || '-'}
+                                                    </span>
+                                                    <span className={`font-bold ${tenantSigned ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                        {tenantSigned ? '서명완료 ✓' : '서명대기 ⏳'}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <h4 className="font-bold text-sm mt-2 text-gray-800 line-clamp-1">
-                                            {contract.listingTitle || '매물 정보 없음'}
-                                        </h4>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            📍 {contract.propertyAddress || '주소 정보 없음'}
-                                        </p>
-                                        <div className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg flex justify-between">
-                                            <span>당사자: {contract.landlordName || '-'} (임대인/매도인)</span>
-                                            <span className="text-gray-300">|</span>
-                                            <span>{contract.tenantName || '-'} (임차인/매수인)</span>
+
+                                        {/* Action Buttons */}
+                                        <div className="pt-2 border-t border-gray-100 space-y-2">
+                                            {!isCompleted && (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyLink('tenant')}
+                                                        className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-indigo-200"
+                                                    >
+                                                        <span>📲</span>
+                                                        <span>임차인 링크 복사</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyLink('landlord')}
+                                                        className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-indigo-200"
+                                                    >
+                                                        <span>📲</span>
+                                                        <span>임대인 링크 복사</span>
+                                                    </button>
+                                                </div>
+                                            )}
+                                            <div className="flex space-x-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(`/contract/${contract.id}`)}
+                                                    className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 text-center text-xs font-bold rounded-xl transition"
+                                                >
+                                                    서명 현황 관리 ✍️
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => window.open(`/contract/print?id=${contract.id}`, '_blank')}
+                                                    className={`flex-1 py-3 text-center text-xs font-bold rounded-xl shadow-xs transition ${
+                                                        isCompleted ? 'bg-market-orange hover:bg-orange-600 text-white' : 'bg-gray-800 hover:bg-black text-white'
+                                                    }`}
+                                                >
+                                                    {isCompleted ? '최종 계약서 인쇄 📄' : '계약서 미리보기 🔎'}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex space-x-2 pt-2 border-t border-gray-100">
-                                        <a
-                                            href={contract.pdfUrl}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="flex-1 py-2.5 bg-gray-800 hover:bg-black text-white text-center text-xs font-bold rounded-xl shadow-sm transition"
-                                        >
-                                            계약서 PDF 보기 🔎
-                                        </a>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
 import SignaturePad from '../components/common/SignaturePad';
@@ -12,7 +12,11 @@ const ContractForm = () => {
     const { userData, currentUser } = useAuth();
 
     const [listing, setListing] = useState(null);
+    const [savedContractId, setSavedContractId] = useState(null);
+    const [contractStatus, setContractStatus] = useState('draft');
     const [loading, setLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [copiedTarget, setCopiedTarget] = useState(null);
     
     // Contract states
     const [contractType, setContractType] = useState('lease'); // 'lease' (임대차) or 'sale' (매매)
@@ -44,16 +48,65 @@ const ContractForm = () => {
 
     // Special clauses
     const [specialClauses, setSpecialClauses] = useState([
-        "현 상태의 임대차계약이며, 시설물 노후로 인한 파손 및 누수 등은 임대인이 수리해주기로 한다.",
-        "임대인은 잔금 지급일 다음날까지 등기부등본상 권리관계를 계약 당일과 동일하게 유지한다.",
-        "임차인의 전세자금대출에 임대인은 적극 협조하기로 하며, 금융기관의 거절로 대출이 불가할 시 본 계약은 무효로 하고 계약금은 즉시 반환한다."
+        '현 상태의 임대차계약이며, 시설물 노후로 인한 파손 및 누수 등은 임대인이 수리해주기로 한다.',
+        '임대인은 잔금 지급일 다음날까지 등기부등본상 권리관계를 계약 당일과 동일하게 유지한다.',
+        '임차인의 전세자금대출에 임대인은 적극 협조하기로 하며, 금융기관의 거절로 대출이 불가할 시 본 계약은 무효로 하고 계약금은 즉시 반환한다.'
     ]);
     const [newClause, setNewClause] = useState('');
 
+    // Load either existing contract or listing details
     useEffect(() => {
-        const fetchListing = async () => {
+        const fetchInitialData = async () => {
             try {
-                const docSnap = await getDoc(doc(db, "listings", listingId));
+                // 1. Check if param is an existing contract
+                const contractDocSnap = await getDoc(doc(db, 'contracts', listingId));
+                if (contractDocSnap.exists()) {
+                    const cData = contractDocSnap.data();
+                    setSavedContractId(contractDocSnap.id);
+                    setContractStatus(cData.status || 'draft');
+                    setContractType(cData.contractType || 'lease');
+                    
+                    if (cData.financials) {
+                        setDeposit(cData.financials.deposit || '');
+                        setMonthlyRent(cData.financials.monthlyRent || '');
+                        setPrice(cData.financials.price || '');
+                        setDownPayment(cData.financials.downPayment || '');
+                        setInterPayment(cData.financials.interPayment || '');
+                        setBalancePayment(cData.financials.balancePayment || '');
+                        setPayDate(cData.financials.payDate || '');
+                    }
+
+                    if (cData.landlord) setLandlord(cData.landlord);
+                    if (cData.tenant) setTenant(cData.tenant);
+                    if (cData.broker) setBroker(cData.broker);
+                    if (cData.specialClauses) setSpecialClauses(cData.specialClauses);
+                    if (cData.signatures) {
+                        setLandlordSig(cData.signatures.landlordSig || '');
+                        setTenantSig(cData.signatures.tenantSig || '');
+                        setBrokerSig(cData.signatures.brokerSig || '');
+                    }
+
+                    // Also fetch listing info if present
+                    if (cData.listingId) {
+                        const listingSnap = await getDoc(doc(db, 'listings', cData.listingId));
+                        if (listingSnap.exists()) {
+                            setListing(listingSnap.data());
+                        }
+                    } else if (cData.property) {
+                        setListing({
+                            title: cData.listingTitle || cData.property.buildingName || cData.property.address,
+                            location: cData.property.address,
+                            buildingName: cData.property.buildingName,
+                            exclusiveArea: cData.property.exclusiveArea,
+                            supplyArea: cData.property.supplyArea
+                        });
+                    }
+                    setLoading(false);
+                    return;
+                }
+
+                // 2. Otherwise load from listings
+                const docSnap = await getDoc(doc(db, 'listings', listingId));
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setListing(data);
@@ -68,21 +121,40 @@ const ContractForm = () => {
                         setPrice(data.price || '');
                     }
                 } else {
-                    alert("매물 정보를 찾을 수 없습니다.");
+                    alert('매물 정보를 찾을 수 없습니다.');
                     navigate('/profile');
                 }
             } catch (err) {
-                console.error("Error fetching listing details:", err);
+                console.error('데이터 로드 실패:', err);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchListing();
+        fetchInitialData();
     }, [listingId, navigate]);
 
+    // Real-time listener when contract is saved
     useEffect(() => {
-        if (userData) {
+        if (!savedContractId) return;
+
+        const unsub = onSnapshot(doc(db, 'contracts', savedContractId), (docSnap) => {
+            if (docSnap.exists()) {
+                const cData = docSnap.data();
+                setContractStatus(cData.status || 'draft');
+                if (cData.signatures) {
+                    if (cData.signatures.landlordSig) setLandlordSig(cData.signatures.landlordSig);
+                    if (cData.signatures.tenantSig) setTenantSig(cData.signatures.tenantSig);
+                    if (cData.signatures.brokerSig) setBrokerSig(cData.signatures.brokerSig);
+                }
+            }
+        });
+
+        return () => unsub();
+    }, [savedContractId]);
+
+    useEffect(() => {
+        if (userData && !savedContractId) {
             setBroker({
                 officeName: userData.brokerInfo?.officeName || '',
                 registrationNumber: userData.brokerInfo?.registrationNumber || '',
@@ -91,7 +163,7 @@ const ContractForm = () => {
                 address: userData.address || ''
             });
         }
-    }, [userData]);
+    }, [userData, savedContractId]);
 
     const handleAddClause = () => {
         if (!newClause.trim()) return;
@@ -103,31 +175,18 @@ const ContractForm = () => {
         setSpecialClauses(specialClauses.filter((_, i) => i !== index));
     };
 
-    const handleGenerateContract = () => {
-        if (!listing) return;
-
-        // Basic validation
-        if (!landlord.name || !tenant.name) {
-            alert('임대인(매도인)과 임차인(매수인)의 성명을 입력해 주세요.');
-            return;
-        }
-
-        // Signature validation
-        if (!landlordSig || !tenantSig || (broker.officeName && !brokerSig)) {
-            alert('모든 당사자의 서명을 완료해 주세요.');
-            return;
-        }
-
-        const contractData = {
-            listingId,
+    const buildContractPayload = () => {
+        return {
+            listingId: listingId || '',
             brokerId: currentUser?.uid || '',
+            listingTitle: listing?.title || listing?.buildingName || listing?.location || '부동산 계약서',
             contractType,
             property: {
-                address: listing.location,
-                buildingName: listing.buildingName || '',
-                propertyType: listing.propertyType || '',
-                exclusiveArea: listing.exclusiveArea || '',
-                supplyArea: listing.supplyArea || '',
+                address: listing?.location || '',
+                buildingName: listing?.buildingName || '',
+                propertyType: listing?.propertyType || '',
+                exclusiveArea: listing?.exclusiveArea || '',
+                supplyArea: listing?.supplyArea || '',
             },
             financials: {
                 deposit,
@@ -148,10 +207,133 @@ const ContractForm = () => {
                 brokerSig
             }
         };
+    };
 
-        // Store in sessionStorage to fetch from Print window
+    const handleSaveOrCreateContract = async () => {
+        if (!listing) return;
+
+        // Validation
+        if (!landlord.name || !tenant.name) {
+            alert('임대인(매도인)과 임차인(매수인)의 성명을 입력해 주세요.');
+            return;
+        }
+
+        if (!tenant.phone) {
+            alert('비대면 서명 링크 전달을 위해 임차인(매수인)의 연락처를 입력해 주세요.');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const payload = buildContractPayload();
+
+            // Calculate status
+            const hasLandlord = !!landlordSig;
+            const hasTenant = !!tenantSig;
+            const hasBroker = broker.officeName ? !!brokerSig : true;
+            const isCompleted = hasLandlord && hasTenant && hasBroker;
+
+            payload.status = isCompleted ? 'completed' : (hasLandlord || hasTenant || hasBroker ? 'in_progress' : 'pending_signatures');
+            payload.updatedAt = serverTimestamp();
+
+            if (savedContractId) {
+                // Update existing contract
+                await updateDoc(doc(db, 'contracts', savedContractId), payload);
+                alert('계약서 변경사항이 저장되었습니다.');
+            } else {
+                // Create new contract document
+                payload.createdAt = serverTimestamp();
+                const docRef = await addDoc(collection(db, 'contracts'), payload);
+                setSavedContractId(docRef.id);
+                setContractStatus(payload.status);
+                alert('전자계약서가 안전하게 생성되었습니다! 상대방에게 서명 요청 링크를 공유해 주세요.');
+            }
+        } catch (err) {
+            console.error('계약서 저장 에러:', err);
+            alert('계약서 저장 중 오류가 발생했습니다: ' + err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCopySignLink = (role) => {
+        if (!savedContractId) {
+            alert('먼저 아래의 [전자계약서 생성 및 서명 요청 시작] 버튼을 눌러 계약서를 생성해 주세요.');
+            return;
+        }
+
+        const signUrl = `${window.location.origin}/contract/${savedContractId}/sign?role=${role}`;
+        const targetName = role === 'tenant' ? (tenant.name || '고객') : (landlord.name || '고객');
+        const roleTitle = role === 'tenant' ? (contractType === 'lease' ? '임차인' : '매수인') : (contractType === 'lease' ? '임대인' : '매도인');
+        const propertyName = listing?.buildingName ? `${listing.location} ${listing.buildingName}` : (listing?.title || '계약 대상 부동산');
+
+        const message = `[부동산마트 전자계약]\n${targetName}님, '${propertyName}' ${roleTitle} 전자계약서 서명 요청 안내입니다.\n\n아래 보안 링크를 눌러 계약 내용을 확인하시고 터치 서명을 진행해 주세요.\n👉 서명하기: ${signUrl}`;
+
+        navigator.clipboard.writeText(message).then(() => {
+            setCopiedTarget(role);
+            setTimeout(() => setCopiedTarget(null), 3000);
+            alert(`[${roleTitle} 서명 링크 및 카카오톡 안내 문구]가 클립보드에 복사되었습니다!\n카카오톡이나 문자로 전송해 주세요.`);
+        }).catch(() => {
+            alert('링크 복사에 실패했습니다.');
+        });
+    };
+
+    const handleSignatureSaveLocal = async (dataUrl) => {
+        let updatedLandlord = landlordSig;
+        let updatedTenant = tenantSig;
+        let updatedBroker = brokerSig;
+
+        if (activeSigTarget === 'landlord') {
+            setLandlordSig(dataUrl);
+            updatedLandlord = dataUrl;
+        }
+        if (activeSigTarget === 'tenant') {
+            setTenantSig(dataUrl);
+            updatedTenant = dataUrl;
+        }
+        if (activeSigTarget === 'broker') {
+            setBrokerSig(dataUrl);
+            updatedBroker = dataUrl;
+        }
+
+        // If contract is already saved, sync to Firestore
+        if (savedContractId) {
+            try {
+                const nowIso = new Date().toISOString();
+                const updatedSigs = {
+                    landlordSig: updatedLandlord,
+                    tenantSig: updatedTenant,
+                    brokerSig: updatedBroker
+                };
+
+                const hasLandlord = !!updatedLandlord;
+                const hasTenant = !!updatedTenant;
+                const hasBroker = broker.officeName ? !!updatedBroker : true;
+                const isCompleted = hasLandlord && hasTenant && hasBroker;
+
+                await updateDoc(doc(db, 'contracts', savedContractId), {
+                    signatures: updatedSigs,
+                    status: isCompleted ? 'completed' : 'in_progress',
+                    updatedAt: serverTimestamp(),
+                    ...(isCompleted ? { completedAt: serverTimestamp() } : {})
+                });
+            } catch (err) {
+                console.error('서명 동기화 실패:', err);
+            }
+        }
+    };
+
+    const handlePrintContract = () => {
+        if (!listing) return;
+
+        const contractData = buildContractPayload();
         sessionStorage.setItem('contract_data', JSON.stringify(contractData));
-        window.open('/contract/print', '_blank');
+
+        if (savedContractId) {
+            window.open(`/contract/print?id=${savedContractId}`, '_blank');
+        } else {
+            window.open('/contract/print', '_blank');
+        }
     };
 
     if (loading) {
@@ -162,15 +344,64 @@ const ContractForm = () => {
         );
     }
 
+    const totalRequired = broker.officeName ? 3 : 2;
+    let signedCount = 0;
+    if (landlordSig) signedCount++;
+    if (tenantSig) signedCount++;
+    if (broker.officeName && brokerSig) signedCount++;
+    const isAllSigned = signedCount >= totalRequired;
+
     return (
         <MobileLayout>
             <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
                 <button onClick={() => navigate('/profile')} className="text-2xl mr-4">←</button>
-                <div className="flex-1 text-center font-bold">계약서 작성</div>
+                <div className="flex-1 text-center font-bold">
+                    {savedContractId ? '전자계약서 서명 관리' : '전자계약서 작성'}
+                </div>
                 <div className="w-8"></div>
             </header>
 
-            <div className="p-4 pb-24 space-y-6">
+            <div className="p-4 pb-28 space-y-5">
+                {/* Contract Status Banner */}
+                {savedContractId && (
+                    <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-5 rounded-3xl shadow-md space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-black px-2.5 py-1 rounded-full bg-white/20 text-white">
+                                계약 고유번호 #{savedContractId.slice(0, 8)}
+                            </span>
+                            <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                                isAllSigned ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-gray-950'
+                            }`}>
+                                {isAllSigned ? '체결 완료 ✓' : `서명 진행중 (${signedCount}/${totalRequired})`}
+                            </span>
+                        </div>
+                        <div>
+                            <p className="text-xs text-gray-300">비대면 전자서명 교차 진행 상황</p>
+                            <h2 className="text-base font-black mt-0.5">{listing?.title || listing?.location}</h2>
+                        </div>
+
+                        {/* Remote Share Actions */}
+                        <div className="pt-2 border-t border-white/10 grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => handleCopySignLink('tenant')}
+                                className="bg-white/10 hover:bg-white/20 active:scale-95 transition text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-1 border border-white/20"
+                            >
+                                <span>📲</span>
+                                <span>{copiedTarget === 'tenant' ? '복사 완료! ✓' : '임차인 서명 링크'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleCopySignLink('landlord')}
+                                className="bg-white/10 hover:bg-white/20 active:scale-95 transition text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-1 border border-white/20"
+                            >
+                                <span>📲</span>
+                                <span>{copiedTarget === 'landlord' ? '복사 완료! ✓' : '임대인 서명 링크'}</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Property Brief */}
                 <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl">
                     <h3 className="font-bold text-gray-700 text-sm mb-2">대상 물건 정보</h3>
@@ -286,7 +517,18 @@ const ContractForm = () => {
 
                 {/* Landlord & Tenant Info */}
                 <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm space-y-4">
-                    <h3 className="font-bold text-sm text-gray-700">{contractType === 'lease' ? '임대인' : '매도인'} 인적사항</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm text-gray-700">{contractType === 'lease' ? '임대인' : '매도인'} 인적사항</h3>
+                        {savedContractId && (
+                            <button
+                                type="button"
+                                onClick={() => handleCopySignLink('landlord')}
+                                className="text-xs text-indigo-600 font-bold hover:underline"
+                            >
+                                🔗 서명 링크 복사
+                            </button>
+                        )}
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                         <input
                             type="text"
@@ -308,14 +550,14 @@ const ContractForm = () => {
                             type="text"
                             value={landlord.registrationNum}
                             onChange={(e) => setLandlord({ ...landlord, registrationNum: e.target.value })}
-                            placeholder="주민등록번호"
+                            placeholder="주민번호"
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-market-orange col-span-1"
                         />
                         <input
                             type="text"
                             value={landlord.address}
                             onChange={(e) => setLandlord({ ...landlord, address: e.target.value })}
-                            placeholder="현재 거주지 주소"
+                            placeholder="거주지 주소"
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-market-orange col-span-2"
                         />
                     </div>
@@ -344,15 +586,27 @@ const ContractForm = () => {
                                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-650 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                                 >
                                     <span>✍️</span>
-                                    <span>터치 서명하기</span>
+                                    <span>직접 서명하기</span>
                                 </button>
                             )}
                         </div>
                     </div>
                 </div>
 
+                {/* Tenant Info */}
                 <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm space-y-4">
-                    <h3 className="font-bold text-sm text-gray-700">{contractType === 'lease' ? '임차인' : '매수인'} 인적사항</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm text-gray-700">{contractType === 'lease' ? '임차인' : '매수인'} 인적사항</h3>
+                        {savedContractId && (
+                            <button
+                                type="button"
+                                onClick={() => handleCopySignLink('tenant')}
+                                className="text-xs text-indigo-600 font-bold hover:underline"
+                            >
+                                🔗 서명 링크 복사
+                            </button>
+                        )}
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                         <input
                             type="text"
@@ -374,14 +628,14 @@ const ContractForm = () => {
                             type="text"
                             value={tenant.registrationNum}
                             onChange={(e) => setTenant({ ...tenant, registrationNum: e.target.value })}
-                            placeholder="주민등록번호"
+                            placeholder="주민번호"
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-market-orange col-span-1"
                         />
                         <input
                             type="text"
                             value={tenant.address}
                             onChange={(e) => setTenant({ ...tenant, address: e.target.value })}
-                            placeholder="현재 거주지 주소"
+                            placeholder="거주지 주소"
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-market-orange col-span-2"
                         />
                     </div>
@@ -410,7 +664,7 @@ const ContractForm = () => {
                                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-650 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                                 >
                                     <span>✍️</span>
-                                    <span>터치 서명하기</span>
+                                    <span>직접 서명하기</span>
                                 </button>
                             )}
                         </div>
@@ -482,7 +736,7 @@ const ContractForm = () => {
                                         className="bg-indigo-50 hover:bg-indigo-100 text-indigo-650 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                                     >
                                         <span>✍️</span>
-                                        <span>터치 서명하기</span>
+                                        <span>중개사 터치 서명하기</span>
                                     </button>
                                 )}
                             </div>
@@ -490,22 +744,37 @@ const ContractForm = () => {
                     )}
                 </div>
 
-                {/* Generate Button */}
-                <button
-                    onClick={handleGenerateContract}
-                    className="w-full py-4 bg-market-orange text-white font-bold rounded-xl shadow-lg transition active:scale-95 text-center block"
-                >
-                    계약서 인쇄 및 PDF 저장하기 📄
-                </button>
+                {/* Primary Action Buttons */}
+                <div className="space-y-3 pt-2">
+                    {/* Save or Create Contract */}
+                    <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={handleSaveOrCreateContract}
+                        className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-md hover:bg-indigo-700 transition active:scale-95 text-center block text-sm"
+                    >
+                        {isSaving ? '저장 중...' : (savedContractId ? '계약서 변경사항 저장' : '전자계약서 생성 및 서명 요청 시작 🚀')}
+                    </button>
+
+                    {/* Print/Download Button */}
+                    <button
+                        type="button"
+                        onClick={handlePrintContract}
+                        className={`w-full py-4 font-bold rounded-2xl shadow-md transition active:scale-95 text-center block text-sm ${
+                            isAllSigned
+                                ? 'bg-market-orange text-white hover:bg-amber-600'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                    >
+                        {isAllSigned ? '최종 계약서 인쇄 및 PDF 저장하기 📄' : '계약서 미리보기 / 인쇄 📄'}
+                    </button>
+                </div>
             </div>
+
             <SignaturePad
                 isOpen={activeSigTarget !== null}
                 onClose={() => setActiveSigTarget(null)}
-                onSave={(dataUrl) => {
-                    if (activeSigTarget === 'landlord') setLandlordSig(dataUrl);
-                    if (activeSigTarget === 'tenant') setTenantSig(dataUrl);
-                    if (activeSigTarget === 'broker') setBrokerSig(dataUrl);
-                }}
+                onSave={handleSignatureSaveLocal}
                 title={
                     activeSigTarget === 'landlord' ? (contractType === 'lease' ? '임대인 서명 날인' : '매도인 서명 날인') :
                     activeSigTarget === 'tenant' ? (contractType === 'lease' ? '임차인 서명 날인' : '매수인 서명 날인') :

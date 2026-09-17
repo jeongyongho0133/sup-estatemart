@@ -104,6 +104,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Contracts: allow public read for remote signing, authenticated create, and signing updates
+    match /contracts/{contractId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if true;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.brokerId == request.auth.uid);
+    }
+
     // Default: deny all other collections
     match /{document=**} {
       allow read, write: if false;
