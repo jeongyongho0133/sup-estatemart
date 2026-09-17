@@ -210,7 +210,9 @@ const ListingDetail = () => {
             return;
         }
 
-        if (currentUser.uid === listing.userId) {
+        const targetSellerId = listing.userId || seller?.uid || 'admin';
+
+        if (currentUser.uid === targetSellerId) {
             alert('자신의 매물과는 채팅할 수 없습니다.');
             return;
         }
@@ -231,45 +233,46 @@ const ListingDetail = () => {
             } else {
                 const newChatRef = await addDoc(chatsRef, {
                     listingId: id,
-                    participants: [currentUser.uid, listing.userId],
-                    listingTitle: listing.title,
+                    participants: [currentUser.uid, targetSellerId],
+                    listingTitle: listing.title || '매물 상담',
                     listingImage: listing.imageUrl || null,
                     lastMessage: '채팅방이 생성되었습니다.',
                     lastMessageTime: serverTimestamp(),
                     createdAt: serverTimestamp(),
                     unreadCount: {
                         [currentUser.uid]: 0,
-                        [listing.userId]: 0
+                        [targetSellerId]: 0
                     }
                 });
                 chatRoomId = newChatRef.id;
                 // 본인 매물이 아닌 경우 신규 채팅방 생성 통계 로깅
-                if (currentUser?.uid !== listing.userId) {
-                    await logListingEvent(id, listing.userId, 'chats');
+                if (currentUser?.uid !== targetSellerId) {
+                    logListingEvent(id, targetSellerId, 'chats').catch(err => console.error('Error logging chat event:', err));
                 }
             }
 
             navigate(`/chat/${chatRoomId}`);
         } catch (error) {
-            console.error("Error creating/navigating to chat:", error);
-            alert("채팅방 연결에 실패했습니다.");
+            console.error('Error creating/navigating to chat:', error);
+            alert('채팅방 연결에 실패했습니다: ' + (error.message || '네트워크 상태나 권한을 확인해주세요.'));
         }
     };
 
-    const handleInquiry = async (type, targetUrl) => {
-        try {
-            // 본인 매물이 아닌 경우 문의 통계 로깅
-            if (currentUser?.uid !== listing.userId) {
-                await logListingEvent(id, listing.userId, 'inquiries');
-            }
-        } catch (error) {
-            console.error("Error logging inquiry event:", error);
+    const handleInquiry = (type, targetUrl) => {
+        // 본인 매물이 아닌 경우 문의 통계 백그라운드 로깅 (await 제거로 팝업 차단 방지)
+        if (currentUser?.uid !== listing.userId) {
+            logListingEvent(id, listing.userId, 'inquiries').catch(err => console.error('Error logging inquiry event:', err));
         }
 
         if (type === 'tel' || type === 'sms') {
             window.location.href = targetUrl;
         } else if (type === 'kakao') {
-            window.open(targetUrl, '_blank');
+            let cleanUrl = (targetUrl || '').trim();
+            if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                cleanUrl = 'https://' + cleanUrl;
+            }
+            // 동기적으로 window.open 호출하여 브라우저 팝업 차단 원천 해결
+            window.open(cleanUrl, '_blank', 'noopener,noreferrer');
         }
     };
 
@@ -751,10 +754,14 @@ const ListingDetail = () => {
                                             <span>물건 문자 보내기</span>
                                         </button>
                                         <button onClick={() => {
-                                            if (listing.brokerInfo?.kakaoOpenChatUrl) {
-                                                handleInquiry('kakao', listing.brokerInfo.kakaoOpenChatUrl);
+                                            const kakaoUrl = listing.brokerInfo?.kakaoOpenChatUrl?.trim();
+                                            if (kakaoUrl) {
+                                                handleInquiry('kakao', kakaoUrl);
                                             } else {
-                                                alert("등록된 카카오톡 오픈채팅 링크가 없습니다.");
+                                                const defaultKakaoUrl = 'https://open.kakao.com/o/svCp9uti';
+                                                if (window.confirm('해당 매물 담당 중개사의 개별 오픈채팅 링크가 아직 등록되지 않았습니다.\n부동산 마트 공식 카카오톡 상담 채널로 연결하시겠습니까?')) {
+                                                    handleInquiry('kakao', defaultKakaoUrl);
+                                                }
                                             }
                                         }} className="flex items-center justify-center space-x-2 py-2.5 bg-[#FEE500] text-[#000000] rounded-lg font-bold hover:bg-[#F4DC00] transition shadow-sm outline-none">
                                             <span className="font-black">TALK</span>

@@ -324,23 +324,27 @@ const ContractForm = () => {
                         <span className="text-xs font-bold text-gray-500">서명 상태</span>
                         <div className="flex items-center space-x-2">
                             {landlordSig ? (
-                                <>
-                                    <img src={landlordSig} alt="landlord signature" className="h-8 bg-gray-50 border border-gray-200 rounded p-1" />
+                                <div className="flex items-center space-x-2">
+                                    <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">
+                                        <span className="text-[10px] text-emerald-600 font-black">서명 완료 ✓</span>
+                                        <img src={landlordSig} alt="임대인 서명" className="h-6 object-contain bg-white rounded px-1 border border-emerald-100" />
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={() => setActiveSigTarget('landlord')}
-                                        className="text-xs text-market-orange font-bold"
+                                        className="text-xs text-gray-500 hover:text-market-orange font-bold underline transition"
                                     >
-                                        재서명
+                                        수정
                                     </button>
-                                </>
+                                </div>
                             ) : (
                                 <button
                                     type="button"
                                     onClick={() => setActiveSigTarget('landlord')}
-                                    className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 transition"
+                                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-650 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                                 >
-                                    서명하기
+                                    <span>✍️</span>
+                                    <span>터치 서명하기</span>
                                 </button>
                             )}
                         </div>
@@ -386,23 +390,27 @@ const ContractForm = () => {
                         <span className="text-xs font-bold text-gray-500">서명 상태</span>
                         <div className="flex items-center space-x-2">
                             {tenantSig ? (
-                                <>
-                                    <img src={tenantSig} alt="tenant signature" className="h-8 bg-gray-50 border border-gray-200 rounded p-1" />
+                                <div className="flex items-center space-x-2">
+                                    <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">
+                                        <span className="text-[10px] text-emerald-600 font-black">서명 완료 ✓</span>
+                                        <img src={tenantSig} alt="임차인 서명" className="h-6 object-contain bg-white rounded px-1 border border-emerald-100" />
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={() => setActiveSigTarget('tenant')}
-                                        className="text-xs text-market-orange font-bold"
+                                        className="text-xs text-gray-500 hover:text-market-orange font-bold underline transition"
                                     >
-                                        재서명
+                                        수정
                                     </button>
-                                </>
+                                </div>
                             ) : (
                                 <button
                                     type="button"
                                     onClick={() => setActiveSigTarget('tenant')}
-                                    className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 transition"
+                                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-650 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                                 >
-                                    서명하기
+                                    <span>✍️</span>
+                                    <span>터치 서명하기</span>
                                 </button>
                             )}
                         </div>
@@ -454,23 +462,27 @@ const ContractForm = () => {
                             <span className="text-xs font-bold text-gray-500">서명 상태</span>
                             <div className="flex items-center space-x-2">
                                 {brokerSig ? (
-                                    <>
-                                        <img src={brokerSig} alt="broker signature" className="h-8 bg-gray-50 border border-gray-200 rounded p-1" />
+                                    <div className="flex items-center space-x-2">
+                                        <div className="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">
+                                            <span className="text-[10px] text-emerald-600 font-black">서명 완료 ✓</span>
+                                            <img src={brokerSig} alt="중개사 서명" className="h-6 object-contain bg-white rounded px-1 border border-emerald-100" />
+                                        </div>
                                         <button
                                             type="button"
                                             onClick={() => setActiveSigTarget('broker')}
-                                            className="text-xs text-market-orange font-bold"
+                                            className="text-xs text-gray-500 hover:text-market-orange font-bold underline transition"
                                         >
-                                            재서명
+                                            수정
                                         </button>
-                                    </>
+                                    </div>
                                 ) : (
                                     <button
                                         type="button"
                                         onClick={() => setActiveSigTarget('broker')}
-                                        className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 transition"
+                                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-650 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                                     >
-                                        서명하기
+                                        <span>✍️</span>
+                                        <span>터치 서명하기</span>
                                     </button>
                                 )}
                             </div>
@@ -495,9 +507,14 @@ const ContractForm = () => {
                     if (activeSigTarget === 'broker') setBrokerSig(dataUrl);
                 }}
                 title={
-                    activeSigTarget === 'landlord' ? `${contractType === 'lease' ? '임대인' : '매도인'} 서명` :
-                    activeSigTarget === 'tenant' ? `${contractType === 'lease' ? '임차인' : '매수인'} 서명` :
-                    '개업공인중개사 서명'
+                    activeSigTarget === 'landlord' ? (contractType === 'lease' ? '임대인 서명 날인' : '매도인 서명 날인') :
+                    activeSigTarget === 'tenant' ? (contractType === 'lease' ? '임차인 서명 날인' : '매수인 서명 날인') :
+                    '개업공인중개사 서명 날인'
+                }
+                subtitle={
+                    activeSigTarget === 'landlord' ? (landlord.name ? `'${landlord.name}' 님의 정자 서명 또는 날인` : '임대인(매도인) 서명') :
+                    activeSigTarget === 'tenant' ? (tenant.name ? `'${tenant.name}' 님의 정자 서명 또는 날인` : '임차인(매수인) 서명') :
+                    (broker.representative ? `대표 공인중개사 '${broker.representative}' 님의 서명` : '공인중개사 서명')
                 }
             />
         </MobileLayout>
