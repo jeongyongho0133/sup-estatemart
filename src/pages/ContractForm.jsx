@@ -5,6 +5,7 @@ import { collection, addDoc, doc, getDoc, updateDoc, onSnapshot, serverTimestamp
 import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
 import SignaturePad from '../components/common/SignaturePad';
+import { sendContractCompletedNotification } from '../utils/contractNotification';
 
 const ContractForm = () => {
     const { listingId } = useParams();
@@ -317,6 +318,13 @@ const ContractForm = () => {
                     updatedAt: serverTimestamp(),
                     ...(isCompleted ? { completedAt: serverTimestamp() } : {})
                 });
+
+                if (isCompleted) {
+                    await sendContractCompletedNotification({
+                        ...buildContractPayload(),
+                        id: savedContractId
+                    });
+                }
             } catch (err) {
                 console.error('서명 동기화 실패:', err);
             }

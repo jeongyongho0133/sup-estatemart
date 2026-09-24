@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import SignaturePad from '../components/common/SignaturePad';
+import { sendContractSignedNotification, sendContractCompletedNotification } from '../utils/contractNotification';
 
 const ContractSign = () => {
     const { contractId } = useParams();
@@ -140,6 +141,15 @@ const ContractSign = () => {
 
             await updateDoc(doc(db, 'contracts', contractId), updatePayload);
             setIsSigPadOpen(false);
+
+            // Send notification to contract creator
+            const signerParty = getTargetParty();
+            await sendContractSignedNotification(contract, role, signerParty?.name || '');
+
+            if (isAllCompleted) {
+                await sendContractCompletedNotification({ ...contract, id: contractId });
+            }
+
             alert('성공적으로 서명이 날인되었습니다!');
         } catch (err) {
             console.error('서명 저장 에러:', err);

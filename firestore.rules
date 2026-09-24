@@ -112,6 +112,13 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.brokerId == request.auth.uid);
     }
 
+    // Notifications: allow create for automated system triggers, read/update for authenticated users
+    match /notifications/{notificationId} {
+      allow read, update: if isAuthenticated();
+      allow create: if true;
+      allow delete: if isAdmin();
+    }
+
     // Default: deny all other collections
     match /{document=**} {
       allow read, write: if false;
