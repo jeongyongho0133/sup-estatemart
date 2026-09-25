@@ -406,9 +406,23 @@ const ContractSign = () => {
                             </div>
                         </div>
 
+                        {(contract.contractDate || financials?.contractDate) && (
+                            <p className="text-[11px] text-indigo-700 font-semibold pt-1 border-t border-slate-200 flex items-center space-x-1">
+                                <span>📅</span>
+                                <span>계약 체결일자: {(() => {
+                                    const dStr = contract.contractDate || financials.contractDate;
+                                    if (typeof dStr === 'string' && dStr.includes('-')) {
+                                        const [y, m, d] = dStr.split('-');
+                                        return `${y}년 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+                                    }
+                                    return dStr;
+                                })()}</span>
+                            </p>
+                        )}
+
                         {financials?.payDate && (
-                            <p className="text-[11px] text-gray-500 pt-1">
-                                📅 지급 일정: <span className="font-semibold text-gray-800">{financials.payDate}</span>
+                            <p className="text-[11px] text-gray-500 pt-0.5">
+                                🕒 지급 일정: <span className="font-semibold text-gray-800">{financials.payDate}</span>
                             </p>
                         )}
                     </div>

@@ -158,6 +158,18 @@ const ContractPrint = () => {
         return num.toLocaleString() + ' 만원';
     };
 
+    const formatContractDate = (rawDate) => {
+        if (!rawDate) {
+            const d = new Date();
+            return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+        }
+        if (typeof rawDate === 'string' && rawDate.includes('-')) {
+            const [y, m, d] = rawDate.split('-');
+            return `${y}년 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+        }
+        return rawDate;
+    };
+
     return (
         <div className="bg-white min-h-screen text-gray-900 font-sans p-6 md:p-12 max-w-4xl mx-auto border border-gray-100 shadow-sm relative text-xs leading-relaxed">
             {/* Custom Print Style */}
@@ -350,6 +362,16 @@ const ContractPrint = () => {
                         ) : (
                             <p className="text-gray-400">등록된 특약사항이 없습니다.</p>
                         )}
+                    </div>
+
+                    {/* Contract Agreement Statement & Date */}
+                    <div className="my-6 text-center py-4 border-y border-gray-300 bg-gray-50/50">
+                        <p className="font-semibold text-xs text-gray-700 mb-1.5">
+                            본 계약을 증명하기 위하여 계약 당사자가 이의 없음을 확인하고 각자 기명날인 또는 서명한다.
+                        </p>
+                        <p className="text-base font-black tracking-widest text-gray-900">
+                            {formatContractDate(data?.contractDate || financials?.contractDate)}
+                        </p>
                     </div>
 
                     {/* Section 5: Signatures Section */}

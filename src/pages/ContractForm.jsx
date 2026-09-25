@@ -20,6 +20,15 @@ const ContractForm = () => {
     const [copiedTarget, setCopiedTarget] = useState(null);
     
     // Contract states
+    const getTodayDateString = () => {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const [contractDate, setContractDate] = useState(getTodayDateString());
     const [contractType, setContractType] = useState('lease'); // 'lease' (임대차) or 'sale' (매매)
     const [deposit, setDeposit] = useState('');
     const [monthlyRent, setMonthlyRent] = useState('');
@@ -55,6 +64,67 @@ const ContractForm = () => {
     ]);
     const [newClause, setNewClause] = useState('');
 
+    // Auto-calculate balance: Total - DownPayment - InterPayment = Balance
+    const calculateBalance = (totalVal, downVal, interVal) => {
+        const t = parseFloat(totalVal);
+        const d = parseFloat(downVal);
+        const i = parseFloat(interVal) || 0;
+        if (!isNaN(t) && !isNaN(d)) {
+            const bal = t - d - i;
+            return bal >= 0 ? String(bal) : '0';
+        }
+        return null;
+    };
+
+    // Handlers for automatic calculations
+    const handlePriceChange = (val) => {
+        setPrice(val);
+        if (downPayment) {
+            const autoBal = calculateBalance(val, downPayment, interPayment);
+            if (autoBal !== null) setBalancePayment(autoBal);
+        }
+    };
+
+    const handleDepositChange = (val) => {
+        setDeposit(val);
+        if (downPayment) {
+            const autoBal = calculateBalance(val, downPayment, interPayment);
+            if (autoBal !== null) setBalancePayment(autoBal);
+        }
+    };
+
+    const handleDownPaymentChange = (val) => {
+        setDownPayment(val);
+        const total = contractType === 'sale' ? price : deposit;
+        if (total) {
+            const autoBal = calculateBalance(total, val, interPayment);
+            if (autoBal !== null) setBalancePayment(autoBal);
+        }
+    };
+
+    const handleInterPaymentChange = (val) => {
+        setInterPayment(val);
+        const total = contractType === 'sale' ? price : deposit;
+        if (total && downPayment) {
+            const autoBal = calculateBalance(total, downPayment, val);
+            if (autoBal !== null) setBalancePayment(autoBal);
+        }
+    };
+
+    // Quick set 10% Down Payment
+    const handleSetTenPercentDown = () => {
+        const total = parseFloat(contractType === 'sale' ? price : deposit);
+        if (!isNaN(total) && total > 0) {
+            const down = Math.round(total * 0.1);
+            const inter = parseFloat(interPayment) || 0;
+            const bal = Math.max(0, total - down - inter);
+            setDownPayment(String(down));
+            setBalancePayment(String(bal));
+        } else {
+            alert('먼저 ' + (contractType === 'sale' ? '매매 가격' : '보증금') + '을 입력해 주세요.');
+        }
+    };
+
     // Load either existing contract or listing details
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -66,6 +136,12 @@ const ContractForm = () => {
                     setSavedContractId(contractDocSnap.id);
                     setContractStatus(cData.status || 'draft');
                     setContractType(cData.contractType || 'lease');
+
+                    if (cData.contractDate) {
+                        setContractDate(cData.contractDate);
+                    } else if (cData.financials?.contractDate) {
+                        setContractDate(cData.financials.contractDate);
+                    }
                     
                     if (cData.financials) {
                         setDeposit(cData.financials.deposit || '');
@@ -182,6 +258,7 @@ const ContractForm = () => {
             brokerId: currentUser?.uid || '',
             listingTitle: listing?.title || listing?.buildingName || listing?.location || '부동산 계약서',
             contractType,
+            contractDate,
             property: {
                 address: listing?.location || '',
                 buildingName: listing?.buildingName || '',
@@ -196,7 +273,8 @@ const ContractForm = () => {
                 downPayment,
                 interPayment,
                 balancePayment,
-                payDate
+                payDate,
+                contractDate
             },
             landlord,
             tenant,
@@ -439,9 +517,41 @@ const ContractForm = () => {
                     </div>
                 </div>
 
+                {/* Contract Date Selector Card */}
+                <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-bold text-gray-700 flex items-center space-x-1.5">
+                            <span>📅</span>
+                            <span>계약 체결일자 (계약일자)</span>
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => setContractDate(getTodayDateString())}
+                            className="text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-md transition"
+                        >
+                            오늘 날짜로 설정
+                        </button>
+                    </div>
+                    <input
+                        type="date"
+                        value={contractDate}
+                        onChange={(e) => setContractDate(e.target.value)}
+                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-market-orange focus:bg-white outline-none transition"
+                    />
+                    <p className="text-[11px] text-gray-400">
+                        * 계약서 전문 및 최종 인쇄본에 명시되는 공식 계약 체결일입니다. 필요시 자유롭게 수정할 수 있습니다.
+                    </p>
+                </div>
+
                 {/* Financials Form */}
                 <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm space-y-4">
-                    <h3 className="font-bold text-sm text-gray-700">거래 금액 & 납입 조건 (단위: 만원)</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm text-gray-700">거래 금액 & 납입 조건 (단위: 만원)</h3>
+                        <span className="text-[10px] font-semibold text-market-orange bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
+                            잔금 자동 환산
+                        </span>
+                    </div>
+
                     {contractType === 'lease' ? (
                         <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -449,9 +559,9 @@ const ContractForm = () => {
                                 <input
                                     type="number"
                                     value={deposit}
-                                    onChange={(e) => setDeposit(e.target.value)}
+                                    onChange={(e) => handleDepositChange(e.target.value)}
                                     placeholder="예: 10000"
-                                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
+                                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none font-semibold text-gray-800"
                                 />
                             </div>
                             <div>
@@ -467,26 +577,43 @@ const ContractForm = () => {
                         </div>
                     ) : (
                         <div>
-                            <label className="text-[10px] font-bold text-gray-400 block mb-1">매매 가격</label>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="text-[10px] font-bold text-gray-400">매매 가격</label>
+                                {price && (
+                                    <span className="text-[10px] text-gray-500 font-medium">
+                                        총 {Number(price).toLocaleString()}만원
+                                    </span>
+                                )}
+                            </div>
                             <input
                                 type="number"
                                 value={price}
-                                onChange={(e) => setPrice(e.target.value)}
+                                onChange={(e) => handlePriceChange(e.target.value)}
                                 placeholder="예: 50000"
-                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none font-semibold text-gray-800"
                             />
                         </div>
                     )}
 
                     <div className="grid grid-cols-3 gap-2">
                         <div>
-                            <label className="text-[10px] font-bold text-gray-400 block mb-1">계약금</label>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="text-[10px] font-bold text-gray-400">계약금</label>
+                                <button
+                                    type="button"
+                                    onClick={handleSetTenPercentDown}
+                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-1 py-0.5 rounded"
+                                    title="총 금액의 10% 자동 입력 및 잔금 자동 계산"
+                                >
+                                    10% 자동
+                                </button>
+                            </div>
                             <input
                                 type="number"
                                 value={downPayment}
-                                onChange={(e) => setDownPayment(e.target.value)}
+                                onChange={(e) => handleDownPaymentChange(e.target.value)}
                                 placeholder="금액"
-                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none font-medium"
                             />
                         </div>
                         <div>
@@ -494,22 +621,41 @@ const ContractForm = () => {
                             <input
                                 type="number"
                                 value={interPayment}
-                                onChange={(e) => setInterPayment(e.target.value)}
-                                placeholder="금액"
-                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
+                                onChange={(e) => handleInterPaymentChange(e.target.value)}
+                                placeholder="없으면 공란"
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none font-medium"
                             />
                         </div>
                         <div>
-                            <label className="text-[10px] font-bold text-gray-400 block mb-1">잔금</label>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="text-[10px] font-bold text-gray-400">잔금</label>
+                                <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1 rounded">자동</span>
+                            </div>
                             <input
                                 type="number"
                                 value={balancePayment}
                                 onChange={(e) => setBalancePayment(e.target.value)}
                                 placeholder="금액"
-                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
+                                className="w-full p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl text-sm focus:border-emerald-500 outline-none font-bold text-emerald-900"
                             />
                         </div>
                     </div>
+
+                    {/* Auto Calculation Formula Summary Box */}
+                    {((contractType === 'sale' ? price : deposit) || downPayment) && (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                            <div className="flex items-center justify-between font-bold text-gray-700">
+                                <span>⚡ 실시간 잔금 환산 계산:</span>
+                                <span className="text-emerald-700 font-extrabold">
+                                    잔금 {balancePayment ? `${Number(balancePayment).toLocaleString()}만원` : '0원'}
+                                </span>
+                            </div>
+                            <div className="text-[11px] text-gray-500 font-medium">
+                                {contractType === 'sale' ? '매매금액' : '보증금'} ({price || deposit || 0}만) - 계약금 ({downPayment || 0}만)
+                                {interPayment && Number(interPayment) > 0 ? ` - 중도금 (${interPayment}만)` : ''} = 잔금 ({balancePayment || 0}만)
+                            </div>
+                        </div>
+                    )}
 
                     <div>
                         <label className="text-[10px] font-bold text-gray-400 block mb-1">지급 일정 안내 (예: 잔금일 YYYY-MM-DD 등)</label>

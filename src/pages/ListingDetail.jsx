@@ -574,25 +574,23 @@ const ListingDetail = () => {
                                 VERIFIED
                             </span>
                         </div>
-                        
-                        <div className={`p-4 rounded-xl border ${
-                            listing.safetyReport.safetyGrade === '안전' ? 'bg-green-50/40 border-green-200 text-green-800' :
-                            listing.safetyReport.safetyGrade === '보통' ? 'bg-blue-50/40 border-blue-200 text-blue-800' :
-                            listing.safetyReport.safetyGrade === '주의' ? 'bg-yellow-50/40 border-yellow-200 text-yellow-800' :
-                            'bg-red-50/40 border-red-200 text-red-800'
-                        } space-y-3`}>
+
+                        <div className={`p-4 rounded-xl border ${listing.safetyReport.safetyGrade === '안전' ? 'bg-green-50/40 border-green-200 text-green-800' :
+                                listing.safetyReport.safetyGrade === '보통' ? 'bg-blue-50/40 border-blue-200 text-blue-800' :
+                                    listing.safetyReport.safetyGrade === '주의' ? 'bg-yellow-50/40 border-yellow-200 text-yellow-800' :
+                                        'bg-red-50/40 border-red-200 text-red-800'
+                            } space-y-3`}>
                             <div className="flex items-center justify-between border-b pb-2.5 border-black/5">
                                 <span className="text-xs font-bold text-gray-500">종합 안전 등급</span>
-                                <span className={`text-xs font-black px-3 py-1 rounded-full ${
-                                    listing.safetyReport.safetyGrade === '안전' ? 'bg-green-100 text-green-700' :
-                                    listing.safetyReport.safetyGrade === '보통' ? 'bg-blue-100 text-blue-700' :
-                                    listing.safetyReport.safetyGrade === '주의' ? 'bg-yellow-100 text-yellow-700' :
-                                    'bg-red-100 text-red-700'
-                                }`}>
+                                <span className={`text-xs font-black px-3 py-1 rounded-full ${listing.safetyReport.safetyGrade === '안전' ? 'bg-green-100 text-green-700' :
+                                        listing.safetyReport.safetyGrade === '보통' ? 'bg-blue-100 text-blue-700' :
+                                            listing.safetyReport.safetyGrade === '주의' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-red-100 text-red-700'
+                                    }`}>
                                     {listing.safetyReport.safetyGrade}
                                 </span>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-3 text-xs leading-relaxed">
                                 <div className="bg-white/80 p-2.5 rounded-lg border border-black/5">
                                     <p className="text-[10px] text-gray-400 font-bold block mb-0.5">을구 근저당 금액</p>
@@ -607,7 +605,7 @@ const ListingDetail = () => {
                                     </span>
                                 </div>
                             </div>
-                            
+
                             <div className="text-xs text-gray-700 font-medium leading-relaxed bg-white/50 p-3 rounded-lg border border-black/5 pt-2.5 mt-2">
                                 <span className="text-[10px] text-purple-600 font-black block mb-1">AI 분석 의견 요약</span>
                                 {listing.safetyReport.summary}
@@ -636,12 +634,6 @@ const ListingDetail = () => {
                     </div>
                 )}
 
-                {/* Real Estate Calculator */}
-                <div className="mb-6">
-                    <h3 className="font-bold text-sm mb-1">부동산 계산기</h3>
-                    <p className="text-[10px] text-gray-400">현재 매물 가격 기준으로 예상 비용을 계산해 보세요.</p>
-                    <RealEstateCalculator listing={listing} />
-                </div>
 
                 {/* Map Section */}
                 <div className="mb-6">
@@ -688,6 +680,12 @@ const ListingDetail = () => {
                         {mapProvider === 'roadview' && <KakaoRoadview lat={mapLat} lng={mapLng} />}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{locationStr}</p>
+                </div>
+                {/* Real Estate Calculator */}
+                <div className="mb-6">
+                    <h3 className="font-bold text-sm mb-1">부동산 계산기</h3>
+                    <p className="text-[10px] text-gray-400">현재 매물 가격 기준으로 예상 비용을 계산해 보세요.</p>
+                    <RealEstateCalculator listing={listing} />
                 </div>
 
                 {/* Broker Info */}
