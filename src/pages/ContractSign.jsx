@@ -420,9 +420,23 @@ const ContractSign = () => {
                             </p>
                         )}
 
+                        {(contract.balanceDate || financials?.balanceDate) && (
+                            <p className="text-[11px] text-emerald-850 font-bold pt-0.5 flex items-center space-x-1">
+                                <span>🗓️</span>
+                                <span>잔금 지급일: {(() => {
+                                    const bStr = contract.balanceDate || financials.balanceDate;
+                                    if (typeof bStr === 'string' && bStr.includes('-')) {
+                                        const [y, m, d] = bStr.split('-');
+                                        return `${y}년 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+                                    }
+                                    return bStr;
+                                })()}</span>
+                            </p>
+                        )}
+
                         {financials?.payDate && (
                             <p className="text-[11px] text-gray-500 pt-0.5">
-                                🕒 지급 일정: <span className="font-semibold text-gray-800">{financials.payDate}</span>
+                                🕒 지급 조건: <span className="font-semibold text-gray-800">{financials.payDate}</span>
                             </p>
                         )}
                     </div>

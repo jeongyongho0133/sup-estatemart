@@ -328,12 +328,26 @@ const ContractPrint = () => {
                             )}
                             <tr>
                                 <th className="bg-gray-50 border border-gray-300 p-2 font-bold">잔금</th>
-                                <td className="border border-gray-300 p-2 text-left font-bold" colSpan="3">금 {formatPrice(financials.balancePayment)}</td>
+                                <td className="border border-gray-300 p-2 text-left font-bold" colSpan="3">
+                                    금 {formatPrice(financials.balancePayment)}
+                                    {(data?.balanceDate || financials.balanceDate) && (
+                                        <span className="font-normal text-gray-700 ml-2">
+                                            (잔금일: {formatContractDate(data?.balanceDate || financials.balanceDate)} 지급)
+                                        </span>
+                                    )}
+                                </td>
                             </tr>
-                            {financials.payDate && (
+                            {(financials.payDate || data?.balanceDate || financials.balanceDate) && (
                                 <tr>
                                     <th className="bg-gray-50 border border-gray-300 p-2 font-bold">지급 조건</th>
-                                    <td className="border border-gray-300 p-2 text-left" colSpan="3">{financials.payDate}</td>
+                                    <td className="border border-gray-300 p-2 text-left" colSpan="3">
+                                        {(data?.balanceDate || financials.balanceDate) && (
+                                            <span className="font-semibold mr-1">
+                                                [잔금기일: {formatContractDate(data?.balanceDate || financials.balanceDate)}]
+                                            </span>
+                                        )}
+                                        {financials.payDate || '지정 기일에 일시불 지급 및 인도와 동시이행'}
+                                    </td>
                                 </tr>
                             )}
                         </tbody>

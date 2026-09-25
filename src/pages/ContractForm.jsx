@@ -38,6 +38,7 @@ const ContractForm = () => {
     const [interPayment, setInterPayment] = useState('');
     const [balancePayment, setBalancePayment] = useState('');
     const [payDate, setPayDate] = useState('');
+    const [balanceDate, setBalanceDate] = useState('');
 
     // Signatures
     const [landlordSig, setLandlordSig] = useState('');
@@ -125,6 +126,30 @@ const ContractForm = () => {
         }
     };
 
+    // Balance date calendar change handler
+    const handleBalanceDateChange = (dateVal) => {
+        setBalanceDate(dateVal);
+        if (dateVal) {
+            const [y, m, d] = dateVal.split('-');
+            const datePhrase = `${y}년 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+            // Auto update payDate guide if empty or matching previous date phrase
+            if (!payDate || payDate.includes('잔금은') || payDate.includes('잔금일:')) {
+                setPayDate(`잔금은 ${datePhrase}에 지급하고 인도한다.`);
+            }
+        }
+    };
+
+    // Quick set N months from today or current balance date
+    const handleAddMonthsToBalanceDate = (months) => {
+        const base = new Date();
+        base.setMonth(base.getMonth() + months);
+        const y = base.getFullYear();
+        const m = String(base.getMonth() + 1).padStart(2, '0');
+        const d = String(base.getDate()).padStart(2, '0');
+        const formatted = `${y}-${m}-${d}`;
+        handleBalanceDateChange(formatted);
+    };
+
     // Load either existing contract or listing details
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -141,6 +166,12 @@ const ContractForm = () => {
                         setContractDate(cData.contractDate);
                     } else if (cData.financials?.contractDate) {
                         setContractDate(cData.financials.contractDate);
+                    }
+
+                    if (cData.balanceDate) {
+                        setBalanceDate(cData.balanceDate);
+                    } else if (cData.financials?.balanceDate) {
+                        setBalanceDate(cData.financials.balanceDate);
                     }
                     
                     if (cData.financials) {
@@ -259,6 +290,7 @@ const ContractForm = () => {
             listingTitle: listing?.title || listing?.buildingName || listing?.location || '부동산 계약서',
             contractType,
             contractDate,
+            balanceDate,
             property: {
                 address: listing?.location || '',
                 buildingName: listing?.buildingName || '',
@@ -274,6 +306,7 @@ const ContractForm = () => {
                 interPayment,
                 balancePayment,
                 payDate,
+                balanceDate,
                 contractDate
             },
             landlord,
@@ -657,15 +690,64 @@ const ContractForm = () => {
                         </div>
                     )}
 
-                    <div>
-                        <label className="text-[10px] font-bold text-gray-400 block mb-1">지급 일정 안내 (예: 잔금일 YYYY-MM-DD 등)</label>
-                        <input
-                            type="text"
-                            value={payDate}
-                            onChange={(e) => setPayDate(e.target.value)}
-                            placeholder="예: 잔금은 2026년 7월 30일에 지급한다."
-                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
-                        />
+                    {/* Balance Payment Date Section */}
+                    <div className="pt-3 border-t border-gray-100 space-y-3">
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-bold text-gray-700 flex items-center space-x-1.5">
+                                    <span>📅</span>
+                                    <span>잔금 지급일 (달력 선택)</span>
+                                </label>
+                                <div className="flex items-center space-x-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddMonthsToBalanceDate(1)}
+                                        className="text-[10px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded transition"
+                                        title="오늘 기준 1개월 뒤로 잔금일 설정"
+                                    >
+                                        +1개월
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddMonthsToBalanceDate(2)}
+                                        className="text-[10px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded transition"
+                                        title="오늘 기준 2개월 뒤로 잔금일 설정"
+                                    >
+                                        +2개월
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddMonthsToBalanceDate(3)}
+                                        className="text-[10px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded transition"
+                                        title="오늘 기준 3개월 뒤로 잔금일 설정"
+                                    >
+                                        +3개월
+                                    </button>
+                                </div>
+                            </div>
+                            <input
+                                type="date"
+                                value={balanceDate}
+                                onChange={(e) => handleBalanceDateChange(e.target.value)}
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-market-orange focus:bg-white outline-none transition"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-400 block mb-1">
+                                잔금 지급 일정 및 특기 조건 (직접 입력)
+                            </label>
+                            <input
+                                type="text"
+                                value={payDate}
+                                onChange={(e) => setPayDate(e.target.value)}
+                                placeholder="예: 잔금은 2026년 10월 30일에 지급하며, 인도와 상환한다."
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-market-orange outline-none"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">
+                                * 달력으로 잔금일을 선택하거나, 직접 문구로 상세 지급 조건(분할 납부, 인도 조건 등)을 입력할 수 있습니다.
+                            </p>
+                        </div>
                     </div>
                 </div>
 
