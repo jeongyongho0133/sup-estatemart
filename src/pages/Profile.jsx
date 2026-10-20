@@ -824,7 +824,7 @@ const Profile = () => {
                                         {/* Business Name Display for Agents */}
                                         {(role === 'agent' || role === 'broker') && (
                                             <div className="text-xs font-bold text-indigo-600 mt-1">
-                                                🏢 {userData.brokerInfo?.officeName || '상호 미등록'}
+                                                🏢 {userData?.brokerInfo?.officeName || '상호 미등록'}
                                             </div>
                                         )}
                                         <div className="text-xs text-gray-500 mt-1 flex items-center">
@@ -974,52 +974,148 @@ const Profile = () => {
 
                 {/* Agent Verification Section */}
                 {(role === 'broker' || role === 'agent') && (
-                    <div className="mb-6 p-4 bg-white border border-gray-100 rounded-xl shadow-sm">
-                        <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-sm">중개사 인증 상태</h4>
-                            <span className={`text-xs font-bold ${verificationStatus === 'verified' ? 'text-blue-600' :
-                                verificationStatus === 'pending' ? 'text-orange-500' :
-                                    verificationStatus === 'rejected' ? 'text-red-500' : 'text-gray-400'
-                                }`}>
-                                {verificationStatus === 'verified' ? '인증 완료' :
-                                    verificationStatus === 'pending' ? '심사 중' :
-                                        verificationStatus === 'rejected' ? '반려됨' : '미인증'}
+                    <div className="mb-6 p-5 bg-white border border-gray-100 rounded-2xl shadow-sm space-y-4">
+                        <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                            <div>
+                                <h4 className="font-bold text-sm text-gray-900 flex items-center space-x-1.5">
+                                    <span>🛡️</span>
+                                    <span>개업공인중개사 2종 서류 인증</span>
+                                </h4>
+                                <p className="text-[11px] text-gray-400 mt-0.5">매물 등록 및 안심 중개를 위해 필수 2종 서류를 제출해주세요.</p>
+                            </div>
+                            <span className={`text-xs font-black px-3 py-1 rounded-full ${
+                                verificationStatus === 'verified' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                                verificationStatus === 'pending' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                                verificationStatus === 'rejected' ? 'bg-rose-50 text-rose-600 border border-rose-200' : 
+                                'bg-gray-100 text-gray-500'
+                            }`}>
+                                {verificationStatus === 'verified' ? '인증 완료 ✓' :
+                                 verificationStatus === 'pending' ? '심사 대기중 ⏳' :
+                                 verificationStatus === 'rejected' ? '반려됨 ⚠️' : '미인증 📄'}
                             </span>
                         </div>
 
-                        {verificationStatus === 'none' && (
-                            <div className="space-y-3">
-                                <p className="text-xs text-gray-500 leading-relaxed">
-                                    사업자 등록증 또는 자격증을 업로드하여 중개사 인증을 받아보세요. 인증 시 매물 신뢰도가 상승합니다.
-                                </p>
-                                <label className={`block w-full py-3 border-2 border-dashed border-gray-200 rounded-lg text-center cursor-pointer hover:bg-gray-50 transition ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <span className="text-xs font-bold text-gray-400">
-                                        {uploadingDoc ? '업로드 중...' : '서류 업로드하기 (이미지)'}
-                                    </span>
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleDocUpload} />
-                                </label>
-                            </div>
-                        )}
-
-                        {verificationStatus === 'pending' && (
-                            <p className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">
-                                제출하신 서류를 관리자가 검토 중입니다. 잠시만 기다려주세요.
-                            </p>
-                        )}
-
+                        {/* 반려 사유 노출 */}
                         {verificationStatus === 'rejected' && (
-                            <div className="space-y-3">
-                                <div className="p-3 bg-red-50 text-red-600 text-xs rounded-lg border border-red-100">
-                                    <span className="font-bold">반려 사유:</span> {rejectionReason || "서류가 불충분합니다. 다시 업로드해주세요."}
+                            <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200 space-y-1">
+                                <div className="font-bold flex items-center space-x-1">
+                                    <span>⚠️</span>
+                                    <span>서류 반려 사유</span>
                                 </div>
-                                <label className={`block w-full py-3 border-2 border-dashed border-red-200 rounded-lg text-center cursor-pointer hover:bg-red-50 transition ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <span className="text-xs font-bold text-red-400">
-                                        {uploadingDoc ? '업로드 중...' : '서류 다시 업로드하기'}
-                                    </span>
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleDocUpload} />
-                                </label>
+                                <p className="text-gray-700">{rejectionReason || '제출하신 서류가 불충분하거나 식별이 어렵습니다. 2종 서류를 다시 확인 후 첨부해 주세요.'}</p>
                             </div>
                         )}
+
+                        {/* 심사 대기 중 안내 */}
+                        {verificationStatus === 'pending' && (
+                            <div className="p-3.5 bg-amber-50/70 text-amber-900 text-xs rounded-xl border border-amber-200 leading-relaxed">
+                                <span className="font-bold block mb-1">⏳ 관리자 심사가 진행 중입니다</span>
+                                제출해주신 사업자등록증과 개업공인중개사등록증을 운영자가 확인 후 승인해 드립니다. 승인 완료 즉시 정상적으로 매물을 등록하실 수 있습니다.
+                            </div>
+                        )}
+
+                        {/* 인증 완료 상태 안내 */}
+                        {verificationStatus === 'verified' && (
+                            <div className="p-3.5 bg-emerald-50 text-emerald-900 text-xs rounded-xl border border-emerald-200 leading-relaxed flex items-center justify-between">
+                                <div>
+                                    <span className="font-bold block text-emerald-800">✓ 개업공인중개사 인증 완료</span>
+                                    <span className="text-[11px] text-emerald-700">모든 중개사 혜택 및 매물 등록이 자유롭게 가능합니다.</span>
+                                </div>
+                                <span className="text-2xl">🎖️</span>
+                            </div>
+                        )}
+
+                        {/* 2종 필수 서류 업로드 영역 (미인증/반려 상태이거나 서류 갱신이 필요할 때) */}
+                        <div className="space-y-4 pt-1">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* 서류 1: 사업자등록증 */}
+                                <div className="p-3.5 rounded-xl border border-gray-200 bg-gray-50/50 space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-gray-700 flex items-center space-x-1">
+                                            <span className="text-market-orange font-black">①</span>
+                                            <span>사업자등록증</span>
+                                            <span className="text-red-500 font-bold">*</span>
+                                        </span>
+                                        {(bizDocPreview || userData?.businessLicenseUrl || userData?.verificationDocUrl) && (
+                                            <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                                서류 첨부됨 ✓
+                                            </span>
+                                        )}
+                                    </div>
+                                    <label className={`block w-full py-2.5 px-3 border border-dashed rounded-lg text-center cursor-pointer transition ${
+                                        bizDocPreview ? 'border-emerald-400 bg-emerald-50/30' : 'border-gray-300 hover:border-market-orange hover:bg-orange-50/30'
+                                    }`}>
+                                        <span className="text-xs font-medium text-gray-600 block">
+                                            {bizDocFile ? `📎 ${bizDocFile.name}` : (userData?.businessLicenseUrl || userData?.verificationDocUrl) ? '📎 등록된 사업자등록증 (클릭 시 변경)' : '➕ 사업자등록증 이미지 선택'}
+                                        </span>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleBizDocChange} disabled={uploadingDoc} />
+                                    </label>
+                                    {(bizDocPreview || userData?.businessLicenseUrl || userData?.verificationDocUrl) && (
+                                        <div className="relative h-24 rounded-lg overflow-hidden border border-gray-200 bg-white">
+                                            <img
+                                                src={bizDocPreview || userData?.businessLicenseUrl || userData?.verificationDocUrl}
+                                                alt="사업자등록증 미리보기"
+                                                className="w-full h-full object-contain cursor-pointer"
+                                                onClick={() => window.open(bizDocPreview || userData?.businessLicenseUrl || userData?.verificationDocUrl, '_blank')}
+                                            />
+                                            <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">클릭 시 원본보기</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 서류 2: 개업공인중개사등록증 */}
+                                <div className="p-3.5 rounded-xl border border-gray-200 bg-gray-50/50 space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-gray-700 flex items-center space-x-1">
+                                            <span className="text-market-orange font-black">②</span>
+                                            <span>개업공인중개사등록증</span>
+                                            <span className="text-red-500 font-bold">*</span>
+                                        </span>
+                                        {(brokerDocPreview || userData?.brokerLicenseUrl) && (
+                                            <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                                서류 첨부됨 ✓
+                                            </span>
+                                        )}
+                                    </div>
+                                    <label className={`block w-full py-2.5 px-3 border border-dashed rounded-lg text-center cursor-pointer transition ${
+                                        brokerDocPreview ? 'border-emerald-400 bg-emerald-50/30' : 'border-gray-300 hover:border-market-orange hover:bg-orange-50/30'
+                                    }`}>
+                                        <span className="text-xs font-medium text-gray-600 block">
+                                            {brokerDocFile ? `📎 ${brokerDocFile.name}` : userData?.brokerLicenseUrl ? '📎 등록된 중개사등록증 (클릭 시 변경)' : '➕ 중개사등록증 이미지 선택'}
+                                        </span>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleBrokerDocChange} disabled={uploadingDoc} />
+                                    </label>
+                                    {(brokerDocPreview || userData?.brokerLicenseUrl) && (
+                                        <div className="relative h-24 rounded-lg overflow-hidden border border-gray-200 bg-white">
+                                            <img
+                                                src={brokerDocPreview || userData?.brokerLicenseUrl}
+                                                alt="개업공인중개사등록증 미리보기"
+                                                className="w-full h-full object-contain cursor-pointer"
+                                                onClick={() => window.open(brokerDocPreview || userData?.brokerLicenseUrl, '_blank')}
+                                            />
+                                            <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">클릭 시 원본보기</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 제출 버튼 */}
+                            {(verificationStatus !== 'verified' || bizDocFile || brokerDocFile) && (
+                                <button
+                                    type="button"
+                                    onClick={handleSubmitBrokerDocs}
+                                    disabled={uploadingDoc}
+                                    className={`w-full py-3 rounded-xl font-bold text-xs shadow-md transition flex items-center justify-center space-x-2 ${
+                                        uploadingDoc 
+                                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100'
+                                    }`}
+                                >
+                                    <span>📤</span>
+                                    <span>{uploadingDoc ? '서류 업로드 및 전송 중...' : (verificationStatus === 'pending' ? '서류 수정 후 다시 제출하기' : '2종 서류 제출 및 심사 요청하기')}</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
