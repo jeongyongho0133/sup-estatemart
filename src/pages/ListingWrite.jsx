@@ -468,6 +468,21 @@ const ListingWrite = () => {
             return;
         }
 
+        // 개업공인중개사 관리자 승인 여부 검증
+        const isSuperAdmin = userData?.role === 'admin' || currentUser?.email === 'grandcity@naver.com' || currentUser?.email === 'grand75761500@gmail.com' || currentUser?.email === 'yungho.jeong@gmail.com';
+        const isVerifiedBroker = userData?.role === 'broker' || userData?.verificationStatus === 'verified' || isSuperAdmin;
+
+        if (!isVerifiedBroker) {
+            if (userData?.verificationStatus === 'pending') {
+                alert("개업공인중개사 인증 심사가 진행 중입니다.\n관리자가 서류(사업자등록증, 개업중개사등록증)를 확인 및 승인한 후 매물을 등록하실 수 있습니다.");
+            } else if (userData?.verificationStatus === 'rejected') {
+                alert("개업공인중개사 인증이 반려되었습니다.\n반려 사유를 확인하고 프로필에서 서류를 다시 등록해주세요.");
+            } else {
+                alert("매물 등록은 관리자로부터 개업공인중개사 인증 승인을 받은 회원만 가능합니다.\n프로필에서 사업자등록증과 개업중개사등록증을 첨부하여 인증을 완료해주세요.");
+            }
+            return;
+        }
+
         if (!title.trim()) { alert("제목을 입력해주세요."); return; }
         if (images.length < 1) { alert("사진을 최소 1장 이상 등록해야 합니다. 사진이 없다면 하단의 기본 샘플 이미지를 선택하세요."); return; }
 
@@ -616,6 +631,104 @@ const ListingWrite = () => {
                         <span className="text-xs text-market-orange mt-2 block">가입하신 이메일의 메일함을 확인해주세요. (인증 후 앱 재로그인 필요)</span>
                     </p>
                     <button onClick={() => navigate('/')} className="px-6 py-3 bg-gray-900 text-white rounded-xl font-bold w-full max-w-[200px]">홈으로 이동</button>
+                </div>
+            </MobileLayout>
+        );
+    }
+
+    // 개업공인중개사 인증 승인 여부 접근 제어
+    const isSuperAdmin = userData?.role === 'admin' || currentUser?.email === 'grandcity@naver.com' || currentUser?.email === 'grand75761500@gmail.com' || currentUser?.email === 'yungho.jeong@gmail.com';
+    const isVerifiedBroker = userData?.role === 'broker' || userData?.verificationStatus === 'verified' || isSuperAdmin;
+
+    if (currentUser && !authLoading && !isVerifiedBroker) {
+        const vStatus = userData?.verificationStatus || 'none';
+        return (
+            <MobileLayout showNav={false}>
+                <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100">
+                    <button onClick={() => navigate(-1)} className="text-lg">닫기</button>
+                    <div className="font-bold">개업공인중개사 인증 안내</div>
+                    <div className="w-8"></div>
+                </header>
+                <div className="flex flex-col items-center justify-center p-6 min-h-[70vh] text-center max-w-sm mx-auto">
+                    {vStatus === 'pending' ? (
+                        <>
+                            <div className="w-20 h-20 bg-orange-50 text-market-orange rounded-full flex items-center justify-center text-4xl mb-4 border border-orange-200 animate-pulse">
+                                ⏳
+                            </div>
+                            <h2 className="text-xl font-black mb-2 text-gray-900">개업공인중개사 인증 심사 중</h2>
+                            <div className="text-gray-600 text-xs leading-relaxed mb-6 bg-orange-50/60 p-4 rounded-xl border border-orange-200 text-left space-y-2 w-full">
+                                <p className="font-bold text-gray-800 text-sm">제출하신 서류를 관리자가 검토하고 있습니다.</p>
+                                <ul className="space-y-1.5 text-gray-600 text-[11px] pt-1">
+                                    <li className="flex justify-between items-center bg-white p-2 rounded border border-orange-100">
+                                        <span>📑 사업자 등록증:</span>
+                                        <span className="text-green-600 font-bold">{userData?.businessLicenseUrl || userData?.verificationDocUrl ? '✓ 제출 완료' : '미제출'}</span>
+                                    </li>
+                                    <li className="flex justify-between items-center bg-white p-2 rounded border border-orange-100">
+                                        <span>📜 개업중개사등록증:</span>
+                                        <span className="text-green-600 font-bold">{userData?.brokerLicenseUrl ? '✓ 제출 완료' : '미제출'}</span>
+                                    </li>
+                                </ul>
+                                <p className="text-[11px] text-gray-500 pt-1.5 border-t border-orange-100 leading-normal">
+                                    관리자의 서류 확인 및 승인이 완료되면 매물을 바로 등록하실 수 있습니다.
+                                </p>
+                            </div>
+                            <div className="w-full space-y-2">
+                                <button onClick={() => navigate('/profile')} className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-sm shadow hover:bg-black transition">
+                                    내 정보 및 제출 서류 확인
+                                </button>
+                                <button onClick={() => navigate('/')} className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">
+                                    홈으로 돌아가기
+                                </button>
+                            </div>
+                        </>
+                    ) : vStatus === 'rejected' ? (
+                        <>
+                            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-4xl mb-4 border border-red-200">
+                                ✕
+                            </div>
+                            <h2 className="text-xl font-black mb-2 text-gray-900">중개사 인증 반려 안내</h2>
+                            <div className="text-xs text-red-600 bg-red-50 p-4 rounded-xl border border-red-200 mb-6 w-full text-left space-y-2">
+                                <div className="font-bold text-sm flex items-center space-x-1">
+                                    <span>⚠️</span>
+                                    <span>반려 사유</span>
+                                </div>
+                                <div className="font-medium bg-white p-2.5 rounded-lg border border-red-100 text-gray-800">
+                                    {userData?.rejectionReason || "서류가 식별되지 않거나 유효하지 않습니다."}
+                                </div>
+                            </div>
+                            <p className="text-gray-500 text-xs mb-6 leading-relaxed">
+                                사업자등록증 및 개업중개사등록증을 다시 확인하신 후<br />프로필 페이지에서 서류를 재제출해주시기 바랍니다.
+                            </p>
+                            <div className="w-full space-y-2">
+                                <button onClick={() => navigate('/profile')} className="w-full py-3.5 bg-market-orange text-white rounded-xl font-bold text-sm shadow hover:bg-orange-600 transition">
+                                    서류 다시 등록하기
+                                </button>
+                                <button onClick={() => navigate('/')} className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">
+                                    홈으로 돌아가기
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-4xl mb-4 border border-blue-200">
+                                🛡️
+                            </div>
+                            <h2 className="text-xl font-black mb-2 text-gray-900">개업공인중개사 인증 필요</h2>
+                            <div className="text-gray-600 text-xs leading-relaxed mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200 text-left space-y-2">
+                                <p className="font-bold text-gray-800 text-sm">매물 등록 권한 안내</p>
+                                <p>공인중개사법에 따라 허위 매물 방지 및 거래 투명성을 확보하기 위해, <span className="font-bold text-gray-900">개업공인중개사 인증(관리자 승인)</span>을 완료한 회원만 매물 등록이 가능합니다.</p>
+                                <p className="text-[11px] text-gray-500 pt-1.5 border-t border-gray-200">필수 제출 서류: 사업자 등록증, 개업중개사등록증 (사무소등록증)</p>
+                            </div>
+                            <div className="w-full space-y-2">
+                                <button onClick={() => navigate('/profile')} className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-sm shadow hover:bg-black transition">
+                                    중개사 서류 인증 신청하기
+                                </button>
+                                <button onClick={() => navigate('/')} className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition">
+                                    홈으로 돌아가기
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </MobileLayout>
         );

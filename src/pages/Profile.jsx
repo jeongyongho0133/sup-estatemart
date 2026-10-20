@@ -19,6 +19,10 @@ const Profile = () => {
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('profile'); // 'profile' or 'likes'
     const [uploadingDoc, setUploadingDoc] = useState(false);
+    const [bizDocFile, setBizDocFile] = useState(null);
+    const [bizDocPreview, setBizDocPreview] = useState('');
+    const [brokerDocFile, setBrokerDocFile] = useState(null);
+    const [brokerDocPreview, setBrokerDocPreview] = useState('');
     const [contracts, setContracts] = useState([]);
     const [contractsLoading, setContractsLoading] = useState(false);
 
@@ -214,33 +218,80 @@ const Profile = () => {
         fetchContracts();
     }, [currentUser, viewMode]);
 
-    const handleDocUpload = async (e) => {
-        const file = e.target.files[0];
+    const handleBizDocChange = (e) => {
+        const file = e.target.files?.[0];
         if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('이미지 파일(JPG, PNG, WebP 등)만 첨부할 수 있습니다.');
+            e.target.value = '';
+            return;
+        }
+        setBizDocFile(file);
+        setBizDocPreview(URL.createObjectURL(file));
+    };
 
-        if (!window.confirm("사업자 등록증 또는 자격증 서류를 제출하시겠습니까?")) return;
+    const handleBrokerDocChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('이미지 파일(JPG, PNG, WebP 등)만 첨부할 수 있습니다.');
+            e.target.value = '';
+            return;
+        }
+        setBrokerDocFile(file);
+        setBrokerDocPreview(URL.createObjectURL(file));
+    };
+
+    const handleSubmitBrokerDocs = async () => {
+        if (!bizDocFile && !userData?.businessLicenseUrl && !userData?.verificationDocUrl) {
+            alert('사업자 등록증(이미지)을 첨부해주세요.');
+            return;
+        }
+        if (!brokerDocFile && !userData?.brokerLicenseUrl) {
+            alert('개업중개사등록증(이미지)을 첨부해주세요.');
+            return;
+        }
+
+        if (!window.confirm("사업자 등록증 및 개업중개사등록증 서류를 제출하시겠습니까?")) return;
 
         setUploadingDoc(true);
         try {
             const { getStorage, ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
             const storage = getStorage();
-            const storageRef = ref(storage, `verification_docs/${currentUser.uid}/${Date.now()}_${file.name}`);
 
-            await uploadBytes(storageRef, file);
-            const downloadURL = await getDownloadURL(storageRef);
+            let bizUrl = userData?.businessLicenseUrl || userData?.verificationDocUrl || '';
+            if (bizDocFile) {
+                const cleanName = (bizDocFile.name || 'biz.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+                const bizRef = ref(storage, `verification_docs/${currentUser.uid}/biz_${Date.now()}_${cleanName}`);
+                await uploadBytes(bizRef, bizDocFile);
+                bizUrl = await getDownloadURL(bizRef);
+            }
+
+            let brokerUrl = userData?.brokerLicenseUrl || '';
+            if (brokerDocFile) {
+                const cleanName = (brokerDocFile.name || 'broker.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+                const brokerRef = ref(storage, `verification_docs/${currentUser.uid}/broker_${Date.now()}_${cleanName}`);
+                await uploadBytes(brokerRef, brokerDocFile);
+                brokerUrl = await getDownloadURL(brokerRef);
+            }
 
             // Update user document
             await updateDoc(doc(db, "users", currentUser.uid), {
                 verificationStatus: 'pending',
-                verificationDocUrl: downloadURL,
-                submittedAt: serverTimestamp()
+                businessLicenseUrl: bizUrl,
+                brokerLicenseUrl: brokerUrl,
+                verificationDocUrl: bizUrl,
+                rejectionReason: '',
+                verificationSubmittedAt: serverTimestamp(),
+                submittedAt: serverTimestamp(),
+                role: role === 'user' ? 'agent' : role
             });
 
-            alert("서류가 제출되었습니다. 관리자 승인까지 1~3일이 소요될 수 있습니다.");
-            window.location.reload(); // Refresh to show pending status
+            alert("서류가 제출되었습니다! 관리자의 확인 및 승인 후 개업공인중개사 인증이 완료됩니다.");
+            window.location.reload();
         } catch (error) {
-            console.error("Error uploading document:", error);
-            alert("서류 제출에 실패했습니다.");
+            console.error("Error uploading documents:", error);
+            alert("서류 제출에 실패했습니다: " + error.message);
         } finally {
             setUploadingDoc(false);
         }

@@ -61,7 +61,7 @@ const AiChat = () => {
         return (
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-40 right-4 w-16 h-16 bg-market-orange text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 group"
+                className="fixed bottom-40 right-4 w-24 h-24 bg-market-orange text-white rounded-full shadow-lg flex items-center justify-center hover:scale-145 transition-transform z-50 group"
             >
                 <div className="absolute inset-0 w-full h-full animate-spin-slow">
                     <svg className="w-full h-full" viewBox="0 0 100 100">
@@ -70,9 +70,9 @@ const AiChat = () => {
                             d="M 50, 50 m -38, 0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0"
                             fill="transparent"
                         />
-                        <text className="text-[11px] font-black fill-white/90">
+                        <text className="text-[14px] font-black fill-white/90">
                             <textPath xlinkHref="#circlePath" startOffset="0%">
-                                AI 상담사 • AI 상담사 •
+                                AI 상담사 무료참고용 •부동산상담•
                             </textPath>
                         </text>
                     </svg>
@@ -142,8 +142,8 @@ const AiChat = () => {
                         ➤
                     </button>
                 </div>
-                <div className="text-[10px] text-gray-400 text-center mt-2">
-                    AI 답변은 부정확할 수 있으니 참고용으로만 사용해주세요.
+                <div className="text-[12px] text-gray-400 text-center mt-2">
+                    AI 답변은 부정확할 수 있고 법률적으로 모든 내용에 대하여 면책되며,참고용 으로만 사용해주세요.
                 </div>
             </div>
         </div>

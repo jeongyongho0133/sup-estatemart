@@ -712,31 +712,105 @@ const Admin = () => {
                     ) : (
                         <div className="space-y-4">
                             {pendingVerifications.map(user => (
-                                <div key={user.id} className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
-                                    <div className="mb-3">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <div className="font-bold text-sm">{user.displayName}</div>
-                                                <div className="text-xs text-gray-500">{user.email}</div>
+                                <div key={user.id} className="border border-gray-200 rounded-xl p-5 bg-white shadow-sm space-y-4">
+                                    <div className="flex justify-between items-start border-b border-gray-100 pb-3">
+                                        <div>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="font-bold text-base text-gray-900">{user.brokerInfo?.officeName || user.displayName}</span>
+                                                <span className="text-[10px] bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded-full border border-orange-200">
+                                                    승인 대기중
+                                                </span>
                                             </div>
-                                            <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded border border-orange-100">심사대기</span>
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                대표자: <span className="font-semibold text-gray-800">{user.displayName}</span> | 이메일: {user.email}
+                                            </div>
+                                        </div>
+                                        <div className="text-[11px] text-gray-400">
+                                            신청일: {user.verificationSubmittedAt?.seconds ? new Date(user.verificationSubmittedAt.seconds * 1000).toLocaleDateString() : (user.submittedAt?.seconds ? new Date(user.submittedAt.seconds * 1000).toLocaleDateString() : '-')}
                                         </div>
                                     </div>
-                                    <div className="mb-4">
-                                        <div className="text-xs font-bold text-gray-400 mb-1">제출 서류:</div>
-                                        <div className="w-full h-48 bg-gray-50 rounded border border-gray-100 overflow-hidden flex items-center justify-center">
-                                            {user.verificationDocUrl ? (
-                                                <a href={user.verificationDocUrl} target="_blank" rel="noopener noreferrer" className="w-full h-full">
-                                                    <img src={user.verificationDocUrl} alt="doc" className="w-full h-full object-contain" />
+
+                                    {/* 중개사 상세 정보 */}
+                                    <div className="bg-gray-50 p-3 rounded-lg text-xs grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
+                                        <div><span className="text-gray-400 font-medium">중개등록번호: </span><span className="font-bold text-gray-900">{user.brokerInfo?.registrationNumber || '미입력'}</span></div>
+                                        <div><span className="text-gray-400 font-medium">대표 연락처: </span><span className="font-bold text-gray-900">{user.brokerInfo?.officePhone || user.phone || '미입력'}</span></div>
+                                        <div className="sm:col-span-2"><span className="text-gray-400 font-medium">사무소 주소: </span><span className="font-semibold">{user.brokerInfo?.officeAddress || '미입력'}</span></div>
+                                        {user.brokerInfo?.kakaoOpenChatUrl && (
+                                            <div className="sm:col-span-2">
+                                                <span className="text-gray-400 font-medium">오픈채팅: </span>
+                                                <a href={user.brokerInfo.kakaoOpenChatUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline truncate inline-block max-w-xs align-bottom">
+                                                    {user.brokerInfo.kakaoOpenChatUrl}
                                                 </a>
-                                            ) : (
-                                                <span className="text-gray-300 text-xs">서류 없음</span>
-                                            )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 제출 서류 2종 확인 */}
+                                    <div>
+                                        <div className="text-xs font-bold text-gray-700 mb-2 flex items-center justify-between">
+                                            <span>제출 서류 검토 (2종)</span>
+                                            <span className="text-[10px] font-normal text-gray-400">클릭 시 원본 이미지 새 탭 보기</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {/* 1. 사업자 등록증 */}
+                                            <div className="border border-gray-200 rounded-lg p-2.5 bg-gray-50 flex flex-col">
+                                                <div className="text-xs font-bold text-gray-800 mb-1.5 flex items-center justify-between">
+                                                    <span>📑 1. 사업자 등록증</span>
+                                                    {(user.businessLicenseUrl || user.verificationDocUrl) && (
+                                                        <a href={user.businessLicenseUrl || user.verificationDocUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 font-bold hover:underline">
+                                                            원본 크게보기 ↗
+                                                        </a>
+                                                    )}
+                                                </div>
+                                                <div className="w-full h-44 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center">
+                                                    {(user.businessLicenseUrl || user.verificationDocUrl) ? (
+                                                        <a href={user.businessLicenseUrl || user.verificationDocUrl} target="_blank" rel="noopener noreferrer" className="w-full h-full block">
+                                                            <img src={user.businessLicenseUrl || user.verificationDocUrl} alt="사업자등록증" className="w-full h-full object-contain hover:scale-105 transition duration-200" />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs">서류 미제출</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* 2. 개업중개사등록증 */}
+                                            <div className="border border-gray-200 rounded-lg p-2.5 bg-gray-50 flex flex-col">
+                                                <div className="text-xs font-bold text-gray-800 mb-1.5 flex items-center justify-between">
+                                                    <span>📜 2. 개업중개사등록증</span>
+                                                    {user.brokerLicenseUrl && (
+                                                        <a href={user.brokerLicenseUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 font-bold hover:underline">
+                                                            원본 크게보기 ↗
+                                                        </a>
+                                                    )}
+                                                </div>
+                                                <div className="w-full h-44 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center">
+                                                    {user.brokerLicenseUrl ? (
+                                                        <a href={user.brokerLicenseUrl} target="_blank" rel="noopener noreferrer" className="w-full h-full block">
+                                                            <img src={user.brokerLicenseUrl} alt="개업중개사등록증" className="w-full h-full object-contain hover:scale-105 transition duration-200" />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs">서류 미제출</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex space-x-2">
-                                        <button onClick={() => handleApproveVerification(user.id)} className="flex-1 py-2.5 bg-gray-900 text-white rounded font-bold text-sm hover:bg-black transition">인증 승인</button>
-                                        <button onClick={() => handleRejectVerification(user.id)} className="flex-1 py-2.5 bg-red-50 text-red-500 rounded font-bold text-sm hover:bg-red-100 border border-red-100 transition">반려</button>
+
+                                    {/* 승인 / 반려 버튼 */}
+                                    <div className="flex space-x-2 pt-1">
+                                        <button
+                                            onClick={() => handleApproveVerification(user.id)}
+                                            className="flex-1 py-3 bg-gray-900 text-white rounded-lg font-bold text-sm hover:bg-black transition shadow-sm flex items-center justify-center space-x-1"
+                                        >
+                                            <span>✓</span>
+                                            <span>개업공인중개사 인증 승인</span>
+                                        </button>
+                                        <button
+                                            onClick={() => handleRejectVerification(user.id)}
+                                            className="px-5 py-3 bg-red-50 text-red-600 rounded-lg font-bold text-sm hover:bg-red-100 border border-red-200 transition"
+                                        >
+                                            반려
+                                        </button>
                                     </div>
                                 </div>
                             ))}

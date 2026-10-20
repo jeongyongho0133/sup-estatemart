@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { auth, db, storage } from '../firebase';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import DaumPostcode from 'react-daum-postcode';
 import MobileLayout from '../components/layout/MobileLayout';
 
@@ -27,9 +28,35 @@ const Signup = () => {
     const [detailAddress, setDetailAddress] = useState('');
     const [kakaoOpenChatUrl, setKakaoOpenChatUrl] = useState('');
     const [showPostcode, setShowPostcode] = useState(false);
+
+    // Agent Verification Document Files (Image only)
+    const [businessLicenseFile, setBusinessLicenseFile] = useState(null);
+    const [businessLicensePreview, setBusinessLicensePreview] = useState('');
+    const [brokerLicenseFile, setBrokerLicenseFile] = useState(null);
+    const [brokerLicensePreview, setBrokerLicensePreview] = useState('');
     
     const [agreed, setAgreed] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleFileSelect = (e, type) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            alert('이미지 파일(JPG, PNG, WebP 등)만 첨부할 수 있습니다.');
+            e.target.value = '';
+            return;
+        }
+
+        const previewUrl = URL.createObjectURL(file);
+        if (type === 'business') {
+            setBusinessLicenseFile(file);
+            setBusinessLicensePreview(previewUrl);
+        } else if (type === 'broker') {
+            setBrokerLicenseFile(file);
+            setBrokerLicensePreview(previewUrl);
+        }
+    };
 
     const handleAddressComplete = (data) => {
         let fullAddress = data.address;
@@ -47,9 +74,19 @@ const Signup = () => {
         e.preventDefault();
         if (isSubmitting) return;
 
-        if (role === 'agent' && !officeAddress) {
-            alert('사무실 주소를 검색해주세요.');
-            return;
+        if (role === 'agent') {
+            if (!officeAddress) {
+                alert('사무실 주소를 검색해주세요.');
+                return;
+            }
+            if (!businessLicenseFile) {
+                alert('사업자 등록증(이미지)을 첨부해주세요.');
+                return;
+            }
+            if (!brokerLicenseFile) {
+                alert('개업중개사등록증(이미지)을 첨부해주세요.');
+                return;
+            }
         }
 
         if (!agreed) {
@@ -78,6 +115,23 @@ const Signup = () => {
             const user = userCredential.user;
             await updateProfile(user, { displayName: name });
 
+            let businessLicenseUrl = '';
+            let brokerLicenseUrl = '';
+
+            // Upload broker verification images if agent
+            if (role === 'agent') {
+                const cleanBizName = (businessLicenseFile.name || 'biz.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+                const cleanBrokerName = (brokerLicenseFile.name || 'broker.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+
+                const bizRef = ref(storage, `verification_docs/${user.uid}/biz_${Date.now()}_${cleanBizName}`);
+                await uploadBytes(bizRef, businessLicenseFile);
+                businessLicenseUrl = await getDownloadURL(bizRef);
+
+                const brokerRef = ref(storage, `verification_docs/${user.uid}/broker_${Date.now()}_${cleanBrokerName}`);
+                await uploadBytes(brokerRef, brokerLicenseFile);
+                brokerLicenseUrl = await getDownloadURL(brokerRef);
+            }
+
             // Build user payload
             const userDataPayload = {
                 uid: user.uid,
@@ -87,13 +141,18 @@ const Signup = () => {
                 createdAt: serverTimestamp()
             };
 
-            // Add broker specific info if applicable
+            // Add broker specific info and verification status
             if (role === 'agent') {
                 const fullOfficeAddress = officeAddress.trim() + (detailAddress.trim() ? ` ${detailAddress.trim()}` : '');
+                userDataPayload.verificationStatus = 'pending';
+                userDataPayload.businessLicenseUrl = businessLicenseUrl;
+                userDataPayload.brokerLicenseUrl = brokerLicenseUrl;
+                userDataPayload.verificationDocUrl = businessLicenseUrl; // backward compatibility
+                userDataPayload.verificationSubmittedAt = serverTimestamp();
                 userDataPayload.brokerInfo = {
                     officeName: officeName.trim(),
                     representativeName: name.trim(), // Name field doubles as representative name
-                    officePhone: phoneNumber.trim(), // Storing as officePhone to match ListingDetail's expectations
+                    officePhone: phoneNumber.trim(),
                     registrationNumber: registrationNumber.trim(),
                     officeAddress: fullOfficeAddress,
                     kakaoOpenChatUrl: kakaoOpenChatUrl.trim()
@@ -106,7 +165,11 @@ const Signup = () => {
             // Send Verification Email
             await sendEmailVerification(user);
 
-            alert("회원가입이 완료되었습니다!\n서비스를 정상적으로 이용하기 위해 전송된 이메일의 인증 링크를 클릭해주세요.");
+            if (role === 'agent') {
+                alert("중개사 회원가입이 완료되었습니다!\n제출하신 사업자등록증 및 개업중개사등록증을 관리자가 확인 후 승인하면 매물 등록이 가능합니다.");
+            } else {
+                alert("회원가입이 완료되었습니다!\n서비스를 정상적으로 이용하기 위해 전송된 이메일의 인증 링크를 클릭해주세요.");
+            }
             navigate('/');
         } catch (error) {
             console.error(error);
@@ -289,6 +352,101 @@ const Signup = () => {
                                     onChange={(e) => setKakaoOpenChatUrl(e.target.value)}
                                     placeholder="https://open.kakao.com/o/..."
                                 />
+                            </div>
+
+                            {/* Verification Documents Upload (Mandatory for Brokers) */}
+                            <div className="pt-4 mt-2 border-t border-orange-200/60 space-y-4">
+                                <div className="bg-orange-50 p-3.5 rounded-xl border border-orange-200 text-xs">
+                                    <div className="font-bold text-market-orange mb-1 flex items-center space-x-1">
+                                        <span>📢</span>
+                                        <span>개업공인중개사 필수 서류 첨부 안내</span>
+                                    </div>
+                                    <p className="text-gray-600 text-[11px] leading-relaxed">
+                                        공인중개사법에 따른 허위매물 방지 및 거래 안전을 위해 <span className="font-bold text-gray-900">사업자 등록증</span>과 <span className="font-bold text-gray-900">개업중개사등록증(사무소등록증)</span>을 각각 첨부하셔야 합니다. 관리자 승인 후 매물 등록이 가능합니다.
+                                    </p>
+                                </div>
+
+                                {/* 1. 사업자 등록증 */}
+                                <div>
+                                    <label className="block text-sm font-bold mb-1">
+                                        1. 사업자 등록증 <span className="text-red-500">*</span>
+                                        <span className="text-xs font-normal text-gray-400 ml-1">(이미지 파일)</span>
+                                    </label>
+                                    {businessLicensePreview ? (
+                                        <div className="relative border border-orange-200 rounded-xl overflow-hidden bg-orange-50/20 p-2.5 flex items-center space-x-3">
+                                            <img src={businessLicensePreview} alt="사업자등록증 미리보기" className="w-16 h-16 object-cover rounded-lg border border-gray-200 shadow-sm" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-bold text-gray-800 truncate">{businessLicenseFile?.name}</div>
+                                                <div className="text-[10px] text-green-600 font-bold mt-1 flex items-center">
+                                                    <span className="mr-1">✓</span> 첨부 완료 ({Math.round((businessLicenseFile?.size || 0) / 1024)} KB)
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setBusinessLicenseFile(null);
+                                                    setBusinessLicensePreview('');
+                                                }}
+                                                className="px-2.5 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg font-bold border border-red-200"
+                                            >
+                                                변경/삭제
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-market-orange hover:bg-orange-50/30 transition group">
+                                            <span className="text-2xl mb-1 group-hover:scale-110 transition">📑</span>
+                                            <span className="text-xs font-bold text-gray-700">사업자 등록증 첨부하기 (이미지)</span>
+                                            <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, WebP 형식 지원</span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => handleFileSelect(e, 'business')}
+                                            />
+                                        </label>
+                                    )}
+                                </div>
+
+                                {/* 2. 개업중개사등록증 */}
+                                <div>
+                                    <label className="block text-sm font-bold mb-1">
+                                        2. 개업중개사등록증 (사무소등록증) <span className="text-red-500">*</span>
+                                        <span className="text-xs font-normal text-gray-400 ml-1">(이미지 파일)</span>
+                                    </label>
+                                    {brokerLicensePreview ? (
+                                        <div className="relative border border-orange-200 rounded-xl overflow-hidden bg-orange-50/20 p-2.5 flex items-center space-x-3">
+                                            <img src={brokerLicensePreview} alt="개업중개사등록증 미리보기" className="w-16 h-16 object-cover rounded-lg border border-gray-200 shadow-sm" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-bold text-gray-800 truncate">{brokerLicenseFile?.name}</div>
+                                                <div className="text-[10px] text-green-600 font-bold mt-1 flex items-center">
+                                                    <span className="mr-1">✓</span> 첨부 완료 ({Math.round((brokerLicenseFile?.size || 0) / 1024)} KB)
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setBrokerLicenseFile(null);
+                                                    setBrokerLicensePreview('');
+                                                }}
+                                                className="px-2.5 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg font-bold border border-red-200"
+                                            >
+                                                변경/삭제
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-market-orange hover:bg-orange-50/30 transition group">
+                                            <span className="text-2xl mb-1 group-hover:scale-110 transition">📜</span>
+                                            <span className="text-xs font-bold text-gray-700">개업중개사등록증 첨부하기 (이미지)</span>
+                                            <span className="text-[10px] text-gray-400 mt-0.5">중개사무소등록증 / JPG, PNG, WebP 형식</span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => handleFileSelect(e, 'broker')}
+                                            />
+                                        </label>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
