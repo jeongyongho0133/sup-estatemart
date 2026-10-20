@@ -18,6 +18,18 @@ const DEFAULT_CATEGORIES = [
     { id: 'others', name: '기타', icon: '➕', isMain: true, order: 6 },
 ];
 
+const DEFAULT_SUB_CATEGORIES = [
+    { id: 'sub-land', name: '토지/임야', icon: '⛰️', parentId: 'others' },
+    { id: 'sub-factory', name: '공장/창고', icon: '🏭', parentId: 'others' },
+    { id: 'sub-store', name: '상가/점포', icon: '🏪', parentId: 'others' },
+    { id: 'sub-office', name: '사무실', icon: '💼', parentId: 'others' },
+    { id: 'sub-country', name: '전원주택', icon: '🏡', parentId: 'others' },
+    { id: 'sub-building', name: '상가주택', icon: '🏬', parentId: 'others' },
+    { id: 'sub-redevelop', name: '재개발/입주권', icon: '🏗️', parentId: 'others' },
+    { id: 'sub-hotel', name: '숙박/펜션', icon: '🏨', parentId: 'others' },
+    { id: 'sub-etc', name: '기타/특수', icon: '📌', parentId: 'others' },
+];
+
 const Home = () => {
     const navigate = useNavigate();
     const { logout, currentUser } = useAuth();
@@ -35,11 +47,11 @@ const Home = () => {
 
     // Filter & UI States
     const [searchQuery, setSearchQuery] = useState('');
-    const [categories, setCategories] = useState([]);
-    const [subCategories, setSubCategories] = useState([]);
+    const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+    const [subCategories, setSubCategories] = useState(DEFAULT_SUB_CATEGORIES);
     const [showMenu, setShowMenu] = useState(false);
     const [showOthersModal, setShowOthersModal] = useState(false);
-    const [selectedParentId, setSelectedParentId] = useState(null);
+    const [selectedParentId, setSelectedParentId] = useState('others');
     const [isCategoryExpanded, setIsCategoryExpanded] = useState(false);
     const [viewMode, setViewMode] = useState('list');
     const [mapProvider, setMapProvider] = useState('kakao');
@@ -65,10 +77,13 @@ const Home = () => {
             });
 
             if (allCats.length > 0) {
-                setCategories(allCats.filter(c => c.isMain));
-                setSubCategories(allCats.filter(c => !c.isMain));
+                const mains = allCats.filter(c => c.isMain);
+                const subs = allCats.filter(c => !c.isMain);
+                setCategories(mains.length > 0 ? mains : DEFAULT_CATEGORIES);
+                setSubCategories(subs.length > 0 ? subs : DEFAULT_SUB_CATEGORIES);
             } else {
                 setCategories(DEFAULT_CATEGORIES);
+                setSubCategories(DEFAULT_SUB_CATEGORIES);
             }
         });
 
@@ -216,14 +231,10 @@ const Home = () => {
             return;
         }
 
-        if (cat.name === '기타') {
-            // Find sub-categories for '기타'
-            const subs = subCategories.filter(s => s.parentId === cat.id);
-            if (subs.length > 0) {
-                setSelectedParentId(cat.id);
-                setShowOthersModal(true);
-                return;
-            }
+        if (cat.name === '기타' || cat.id === 'others') {
+            setSelectedParentId(cat.id || 'others');
+            setShowOthersModal(true);
+            return;
         }
 
         const newQuery = cat.name === '전체' ? '' : cat.name;
@@ -380,29 +391,34 @@ const Home = () => {
             {/* Sub-Category Modal for '기타' */}
             {showOthersModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/50" onClick={() => setShowOthersModal(false)}></div>
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setShowOthersModal(false)}></div>
                     <div className="relative bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl animate-scale-in">
                         <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="font-bold">부동산 종류 (기타)</h3>
-                            <button onClick={() => setShowOthersModal(false)} className="text-gray-400">✕</button>
+                            <div>
+                                <h3 className="font-bold text-sm text-gray-900">부동산 종류 (기타)</h3>
+                                <p className="text-[11px] text-gray-400 mt-0.5">세부 부동산 유형을 선택하시면 매물이 필터링됩니다.</p>
+                            </div>
+                            <button onClick={() => setShowOthersModal(false)} className="text-gray-400 hover:text-gray-600 text-lg p-1">✕</button>
                         </div>
-                        <div className="p-6 grid grid-cols-3 gap-4">
-                            {subCategories
-                                .filter(s => s.parentId === selectedParentId)
-                                .map(sub => (
-                                    <button
-                                        key={sub.id}
-                                        onClick={() => {
-                                            setSearchQuery(sub.name);
-                                            setShowOthersModal(false);
-                                        }}
-                                        className="flex flex-col items-center space-y-2 p-2 hover:bg-gray-50 rounded-lg"
-                                    >
-                                        <span className="text-2xl">{sub.icon}</span>
-                                        <span className="text-xs font-medium text-gray-600">{sub.name}</span>
-                                    </button>
-                                ))
-                            }
+                        <div className="p-5 grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+                            {(
+                                subCategories.filter(s => s.parentId === selectedParentId || s.parentId === 'others').length > 0
+                                    ? subCategories.filter(s => s.parentId === selectedParentId || s.parentId === 'others')
+                                    : (subCategories.length > 0 ? subCategories : DEFAULT_SUB_CATEGORIES)
+                            ).map(sub => (
+                                <button
+                                    key={sub.id}
+                                    onClick={() => {
+                                        setSearchQuery(sub.name);
+                                        setShowOthersModal(false);
+                                        logSearchKeyword(sub.name);
+                                    }}
+                                    className="flex flex-col items-center justify-center space-y-1.5 p-3 hover:bg-orange-50/50 hover:border-market-orange/30 border border-gray-100 rounded-xl transition active:scale-95 group"
+                                >
+                                    <span className="text-2xl group-hover:scale-110 transition">{sub.icon}</span>
+                                    <span className="text-xs font-semibold text-gray-700">{sub.name}</span>
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </div>
