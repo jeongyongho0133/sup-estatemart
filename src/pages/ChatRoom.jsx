@@ -176,6 +176,46 @@ const ChatRoom = () => {
         }
     };
 
+    // 고객 상담 장부(CRM) 간이 등록 핸들러
+    const handleAddToCrm = async () => {
+        if (!currentUser) return;
+        const customerName = otherUser?.displayName || otherUser?.nickname || '채팅 문의 고객';
+        const customerPhone = otherUser?.phone || '';
+        const listingTitle = chatInfo?.listingTitle || '';
+        const listingId = chatInfo?.listingId || '';
+
+        const confirmAdd = window.confirm(
+            `[📋 고객 상담 장부(CRM) 등록]\n'${customerName}' 고객님을 내 상담 장부에 등록하시겠습니까?\n\n· 연결 매물: ${listingTitle || '정보 없음'}`
+        );
+        if (!confirmAdd) return;
+
+        try {
+            await addDoc(collection(db, 'crm_leads'), {
+                brokerId: currentUser.uid,
+                customerName,
+                customerPhone,
+                listingId,
+                listingTitle,
+                budget: '',
+                moveInDate: '',
+                status: 'inquiry',
+                notes: `[채팅 문의 연동] 채팅방(${chatId})에서 등록된 고객입니다.`,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+
+            const goToCrm = window.confirm(
+                `'${customerName}' 고객님이 상담 장부에 등록되었습니다!\n지금 마이페이지 상담 장부로 이동하여 메모를 작성하시겠습니까?`
+            );
+            if (goToCrm) {
+                navigate('/profile');
+            }
+        } catch (error) {
+            console.error('Error adding lead to CRM:', error);
+            alert('상담 장부 등록에 실패했습니다: ' + error.message);
+        }
+    };
+
     if (!currentUser) return null;
 
     return (
@@ -213,18 +253,20 @@ const ChatRoom = () => {
                     </div>
                     <div className="flex items-center space-x-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button 
+                            onClick={handleAddToCrm}
+                            className="text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1.5 rounded-lg shadow-2xs flex items-center space-x-1 transition"
+                            title="고객 상담 장부에 등록"
+                        >
+                            <span>📋</span>
+                            <span>장부등록</span>
+                        </button>
+                        <button 
                             onClick={() => navigate(`/contract/${chatInfo.listingId}`)}
                             className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 rounded-lg shadow-sm flex items-center space-x-1 transition"
                             title="이 매물로 전자계약서 작성"
                         >
                             <span>📄</span>
-                            <span>계약서 작성</span>
-                        </button>
-                        <button 
-                            onClick={() => navigate(`/listing/${chatInfo.listingId}`)}
-                            className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-100 px-2.5 py-1.5 rounded-lg bg-white transition"
-                        >
-                            상세
+                            <span>계약서</span>
                         </button>
                     </div>
                 </div>

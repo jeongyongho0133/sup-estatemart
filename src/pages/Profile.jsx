@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import MobileLayout from '../components/layout/MobileLayout';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, setDoc, orderBy, getDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, setDoc, orderBy, getDoc, serverTimestamp, increment, addDoc, onSnapshot } from 'firebase/firestore';
 import AgentReviews from '../components/reviews/AgentReviews';
 
 const Profile = () => {
@@ -25,6 +25,31 @@ const Profile = () => {
     const [brokerDocPreview, setBrokerDocPreview] = useState('');
     const [contracts, setContracts] = useState([]);
     const [contractsLoading, setContractsLoading] = useState(false);
+
+    // 매물 끌어올리기 (UP) 관련 상태
+    const [boostingListingId, setBoostingListingId] = useState(null);
+    const todayDateStr = new Date().toISOString().slice(0, 10);
+    const isFreeUpAvailable = userData?.lastFreeUpDate !== todayDateStr;
+    const userPoints = userData?.points || 0;
+
+    // 고객 상담 장부 (CRM) 관련 상태
+    const [crmLeads, setCrmLeads] = useState([]);
+    const [crmLoading, setCrmLoading] = useState(false);
+    const [crmFilter, setCrmFilter] = useState('all'); // all, inquiry, scheduled, negotiating, completed, on_hold
+    const [crmSearchQuery, setCrmSearchQuery] = useState('');
+    const [showCrmModal, setShowCrmModal] = useState(false);
+    const [editingLead, setEditingLead] = useState(null);
+    const [savingLead, setSavingLead] = useState(false);
+    const [leadForm, setLeadForm] = useState({
+        customerName: '',
+        customerPhone: '',
+        listingId: '',
+        listingTitle: '',
+        budget: '',
+        moveInDate: '',
+        status: 'inquiry',
+        notes: ''
+    });
 
     // 매물 통계 관련 상태
     const [statsLoading, setStatsLoading] = useState(false);
@@ -217,6 +242,210 @@ const Profile = () => {
 
         fetchContracts();
     }, [currentUser, viewMode]);
+
+    // 고객 상담 장부(CRM) 실시간 동기화
+    useEffect(() => {
+        if (!currentUser || viewMode !== 'crm') return;
+
+        setCrmLoading(true);
+        const q = query(
+            collection(db, 'crm_leads'),
+            where('brokerId', '==', currentUser.uid)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const items = [];
+            snapshot.forEach((docSnap) => {
+                items.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            // 최신 수정 또는 생성일시 순 정렬
+            items.sort((a, b) => {
+                const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+                const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+                return timeB - timeA;
+            });
+            setCrmLeads(items);
+            setCrmLoading(false);
+        }, (error) => {
+            console.error('Error fetching CRM leads:', error);
+            setCrmLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser, viewMode]);
+
+    // 매물 최상단 끌어올리기 (UP) 핸들러
+    const handleBoostListing = async (listing) => {
+        if (!currentUser) return;
+        setBoostingListingId(listing.id);
+
+        try {
+            if (isFreeUpAvailable) {
+                const confirmFree = window.confirm(
+                    `[🚀 오늘의 무료 끌어올리기]\n'${listing.title}' 매물을 최상단으로 끌어올리시겠습니까?\n\n💡 매일 1회 무료로 제공됩니다.`
+                );
+                if (!confirmFree) {
+                    setBoostingListingId(null);
+                    return;
+                }
+
+                // Update listing boostedAt
+                await updateDoc(doc(db, 'listings', listing.id), {
+                    boostedAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+
+                // Mark today's free UP used
+                await updateDoc(doc(db, 'users', currentUser.uid), {
+                    lastFreeUpDate: todayDateStr
+                });
+
+                // Update local list
+                setMyListings(prev => prev.map(item => item.id === listing.id ? { ...item, boostedAt: { seconds: Math.floor(Date.now() / 1000) } } : item));
+                alert('🚀 매물이 성공적으로 최상단으로 끌어올려졌습니다!');
+            } else {
+                const COST_PER_UP = 500;
+                if (userPoints < COST_PER_UP) {
+                    const goToStore = window.confirm(
+                        `오늘의 무료 끌어올리기를 이미 사용하셨습니다.\n추가 끌어올리기에는 ${COST_PER_UP}P가 필요합니다.\n(현재 보유: ${userPoints.toLocaleString()}P)\n\n멤버십 & 포인트 충전소로 이동하시겠습니까?`
+                    );
+                    if (goToStore) {
+                        navigate('/store');
+                    }
+                    setBoostingListingId(null);
+                    return;
+                }
+
+                const confirmPoint = window.confirm(
+                    `[🚀 포인트 끌어올리기]\n${COST_PER_UP}P를 사용하여 '${listing.title}' 매물을 최상단으로 끌어올리시겠습니까?\n\n· 현재 보유: ${userPoints.toLocaleString()}P\n· 사용 후 잔여: ${(userPoints - COST_PER_UP).toLocaleString()}P`
+                );
+                if (!confirmPoint) {
+                    setBoostingListingId(null);
+                    return;
+                }
+
+                // Update listing
+                await updateDoc(doc(db, 'listings', listing.id), {
+                    boostedAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+
+                // Deduct points
+                await updateDoc(doc(db, 'users', currentUser.uid), {
+                    points: increment(-COST_PER_UP)
+                });
+
+                // Point history
+                await addDoc(collection(db, 'point_history'), {
+                    userId: currentUser.uid,
+                    amount: -COST_PER_UP,
+                    type: 'boost_listing',
+                    description: `매물 최상단 끌어올리기: ${listing.title}`,
+                    createdAt: serverTimestamp()
+                });
+
+                setMyListings(prev => prev.map(item => item.id === listing.id ? { ...item, boostedAt: { seconds: Math.floor(Date.now() / 1000) } } : item));
+                alert(`🚀 500P를 사용하여 매물이 최상단으로 끌어올려졌습니다!\n(잔여 포인트: ${(userPoints - COST_PER_UP).toLocaleString()}P)`);
+            }
+        } catch (error) {
+            console.error('Error boosting listing:', error);
+            alert('매물 끌어올리기에 실패했습니다: ' + error.message);
+        } finally {
+            setBoostingListingId(null);
+        }
+    };
+
+    // CRM 핸들러
+    const handleOpenNewLeadModal = () => {
+        setEditingLead(null);
+        setLeadForm({
+            customerName: '',
+            customerPhone: '',
+            listingId: '',
+            listingTitle: '',
+            budget: '',
+            moveInDate: '',
+            status: 'inquiry',
+            notes: ''
+        });
+        setShowCrmModal(true);
+    };
+
+    const handleEditLead = (lead) => {
+        setEditingLead(lead);
+        setLeadForm({
+            customerName: lead.customerName || '',
+            customerPhone: lead.customerPhone || '',
+            listingId: lead.listingId || '',
+            listingTitle: lead.listingTitle || '',
+            budget: lead.budget || '',
+            moveInDate: lead.moveInDate || '',
+            status: lead.status || 'inquiry',
+            notes: lead.notes || ''
+        });
+        setShowCrmModal(true);
+    };
+
+    const handleSaveLead = async (e) => {
+        if (e) e.preventDefault();
+        if (!leadForm.customerName.trim()) {
+            alert('고객명을 입력해주세요.');
+            return;
+        }
+
+        setSavingLead(true);
+        try {
+            const payload = {
+                brokerId: currentUser.uid,
+                customerName: leadForm.customerName.trim(),
+                customerPhone: leadForm.customerPhone.trim(),
+                listingId: leadForm.listingId || '',
+                listingTitle: leadForm.listingTitle || '',
+                budget: leadForm.budget.trim(),
+                moveInDate: leadForm.moveInDate.trim(),
+                status: leadForm.status,
+                notes: leadForm.notes.trim(),
+                updatedAt: serverTimestamp()
+            };
+
+            if (editingLead) {
+                await updateDoc(doc(db, 'crm_leads', editingLead.id), payload);
+                alert('고객 상담 정보가 수정되었습니다.');
+            } else {
+                payload.createdAt = serverTimestamp();
+                await addDoc(collection(db, 'crm_leads'), payload);
+                alert('새로운 고객이 상담 장부에 등록되었습니다.');
+            }
+            setShowCrmModal(false);
+        } catch (error) {
+            console.error('Error saving CRM lead:', error);
+            alert('고객 정보 저장에 실패했습니다: ' + error.message);
+        } finally {
+            setSavingLead(false);
+        }
+    };
+
+    const handleQuickStatusChange = async (leadId, newStatus) => {
+        try {
+            await updateDoc(doc(db, 'crm_leads', leadId), {
+                status: newStatus,
+                updatedAt: serverTimestamp()
+            });
+        } catch (error) {
+            console.error('Error updating status:', error);
+            alert('상태 변경에 실패했습니다.');
+        }
+    };
+
+    const handleDeleteLead = async (leadId) => {
+        if (!window.confirm('정말 이 고객 상담 기록을 삭제하시겠습니까?')) return;
+        try {
+            await deleteDoc(doc(db, 'crm_leads', leadId));
+        } catch (error) {
+            console.error('Error deleting lead:', error);
+            alert('삭제에 실패했습니다.');
+        }
+    };
 
     const handleBizDocChange = (e) => {
         const file = e.target.files?.[0];
@@ -708,6 +937,425 @@ const Profile = () => {
                         </div>
                     )}
                 </div>
+            </MobileLayout>
+        );
+    }
+
+    if (viewMode === 'crm') {
+        const filteredLeads = crmLeads.filter(lead => {
+            const matchesFilter = crmFilter === 'all' || lead.status === crmFilter;
+            const matchesSearch = !crmSearchQuery.trim() || 
+                (lead.customerName && lead.customerName.toLowerCase().includes(crmSearchQuery.toLowerCase())) ||
+                (lead.customerPhone && lead.customerPhone.includes(crmSearchQuery)) ||
+                (lead.listingTitle && lead.listingTitle.toLowerCase().includes(crmSearchQuery.toLowerCase())) ||
+                (lead.notes && lead.notes.toLowerCase().includes(crmSearchQuery.toLowerCase()));
+            return matchesFilter && matchesSearch;
+        });
+
+        const statusBadges = {
+            inquiry: { label: '문의 접수', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+            scheduled: { label: '방문/투어 예약', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+            negotiating: { label: '계약 조율중', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+            completed: { label: '체결 완료', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+            on_hold: { label: '보류/취소', color: 'bg-gray-100 text-gray-600 border-gray-200' }
+        };
+
+        return (
+            <MobileLayout>
+                <header className="sticky top-0 bg-white z-20 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
+                    <button onClick={() => setViewMode('profile')} className="text-2xl mr-4">←</button>
+                    <div className="flex-1 text-center font-bold">고객 상담 장부 (CRM)</div>
+                    <button
+                        onClick={handleOpenNewLeadModal}
+                        className="px-3 py-1.5 bg-market-orange text-white text-xs font-bold rounded-xl shadow-xs hover:bg-orange-600 transition"
+                    >
+                        + 등록
+                    </button>
+                </header>
+
+                <div className="p-4 pb-24 space-y-4">
+                    {/* 상단 가이드 */}
+                    <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200/60 rounded-2xl p-4 text-xs text-orange-950 leading-relaxed shadow-xs">
+                        <span className="font-bold flex items-center space-x-1 mb-1 text-market-orange">
+                            <span>📋</span>
+                            <span>간이 고객 관리(CRM) 대시보드</span>
+                        </span>
+                        매물 문의 고객의 요구조건, 방문 일정 및 상담 메모를 기록하고 체결까지 체계적으로 관리하세요.
+                    </div>
+
+                    {/* 상태별 통계 칩 바 */}
+                    <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide text-xs">
+                        <button
+                            onClick={() => setCrmFilter('all')}
+                            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition border ${
+                                crmFilter === 'all' 
+                                    ? 'bg-gray-900 text-white border-gray-900 shadow-xs' 
+                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                            }`}
+                        >
+                            전체 {crmLeads.length}
+                        </button>
+                        <button
+                            onClick={() => setCrmFilter('inquiry')}
+                            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition border ${
+                                crmFilter === 'inquiry' 
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
+                                    : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                            }`}
+                        >
+                            문의 접수 {crmLeads.filter(l => l.status === 'inquiry').length}
+                        </button>
+                        <button
+                            onClick={() => setCrmFilter('scheduled')}
+                            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition border ${
+                                crmFilter === 'scheduled' 
+                                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs' 
+                                    : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'
+                            }`}
+                        >
+                            방문 예약 {crmLeads.filter(l => l.status === 'scheduled').length}
+                        </button>
+                        <button
+                            onClick={() => setCrmFilter('negotiating')}
+                            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition border ${
+                                crmFilter === 'negotiating' 
+                                    ? 'bg-orange-500 text-white border-orange-500 shadow-xs' 
+                                    : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'
+                            }`}
+                        >
+                            계약 조율 {crmLeads.filter(l => l.status === 'negotiating').length}
+                        </button>
+                        <button
+                            onClick={() => setCrmFilter('completed')}
+                            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition border ${
+                                crmFilter === 'completed' 
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' 
+                                    : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                            }`}
+                        >
+                            체결 완료 {crmLeads.filter(l => l.status === 'completed').length}
+                        </button>
+                        <button
+                            onClick={() => setCrmFilter('on_hold')}
+                            className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition border ${
+                                crmFilter === 'on_hold' 
+                                    ? 'bg-gray-600 text-white border-gray-600 shadow-xs' 
+                                    : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                            }`}
+                        >
+                            보류 {crmLeads.filter(l => l.status === 'on_hold').length}
+                        </button>
+                    </div>
+
+                    {/* 검색 인풋 */}
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={crmSearchQuery}
+                            onChange={(e) => setCrmSearchQuery(e.target.value)}
+                            placeholder="고객명, 연락처, 매물명, 메모 검색..."
+                            className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none shadow-2xs"
+                        />
+                        <span className="absolute left-3 top-2.5 text-gray-400 text-sm">🔍</span>
+                        {crmSearchQuery && (
+                            <button
+                                onClick={() => setCrmSearchQuery('')}
+                                className="absolute right-3 top-2.5 text-gray-400 text-xs"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+
+                    {/* 고객 목록 */}
+                    {crmLoading ? (
+                        <div className="text-center py-12 text-gray-400 text-xs font-bold">고객 상담 장부를 불러오는 중입니다...</div>
+                    ) : filteredLeads.length === 0 ? (
+                        <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200 space-y-3">
+                            <span className="text-3xl block">📋</span>
+                            <div className="text-xs">
+                                {crmSearchQuery || crmFilter !== 'all' ? '조건에 일치하는 고객이 없습니다.' : '등록된 상담 고객이 없습니다.'}
+                            </div>
+                            <button
+                                onClick={handleOpenNewLeadModal}
+                                className="px-4 py-2 bg-market-orange text-white text-xs font-bold rounded-xl shadow-xs"
+                            >
+                                + 첫 상담 고객 등록하기
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-3.5">
+                            {filteredLeads.map(lead => {
+                                const currentBadge = statusBadges[lead.status] || statusBadges.inquiry;
+
+                                return (
+                                    <div key={lead.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-2xs space-y-3">
+                                        {/* 헤더: 고객명 + 전화번호 + 상태 뱃지 */}
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="font-extrabold text-base text-gray-900">{lead.customerName}</span>
+                                                    {lead.customerPhone && (
+                                                        <a
+                                                            href={`tel:${lead.customerPhone}`}
+                                                            className="text-xs font-bold text-indigo-600 hover:underline flex items-center space-x-0.5"
+                                                        >
+                                                            <span>📞</span>
+                                                            <span>{lead.customerPhone}</span>
+                                                        </a>
+                                                    )}
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                                    등록일: {lead.createdAt ? new Date(lead.createdAt.seconds * 1000).toLocaleDateString() : '최근'}
+                                                </div>
+                                            </div>
+
+                                            {/* 빠른 상태 셀렉터 */}
+                                            <select
+                                                value={lead.status || 'inquiry'}
+                                                onChange={(e) => handleQuickStatusChange(lead.id, e.target.value)}
+                                                className={`text-[11px] font-black px-2.5 py-1 rounded-full border outline-none cursor-pointer ${currentBadge.color}`}
+                                            >
+                                                <option value="inquiry">문의 접수</option>
+                                                <option value="scheduled">방문/투어 예약</option>
+                                                <option value="negotiating">계약 조율중</option>
+                                                <option value="completed">체결 완료</option>
+                                                <option value="on_hold">보류/취소</option>
+                                            </select>
+                                        </div>
+
+                                        {/* 관심 매물 및 희망 조건 */}
+                                        {(lead.listingTitle || lead.budget || lead.moveInDate) && (
+                                            <div className="bg-gray-50 border border-gray-150 rounded-xl p-2.5 space-y-1.5 text-xs">
+                                                {lead.listingTitle && (
+                                                    <div className="flex items-center space-x-1.5 text-gray-700">
+                                                        <span className="text-gray-400 font-bold">🏠 관심매물:</span>
+                                                        {lead.listingId ? (
+                                                            <span
+                                                                onClick={() => navigate(`/listing/${lead.listingId}`)}
+                                                                className="font-bold text-indigo-600 hover:underline cursor-pointer truncate max-w-[200px]"
+                                                            >
+                                                                {lead.listingTitle}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="font-bold text-gray-800 truncate">{lead.listingTitle}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-wrap gap-2 text-[11px]">
+                                                    {lead.budget && (
+                                                        <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700">
+                                                            💰 <strong>희망 예산:</strong> {lead.budget}
+                                                        </span>
+                                                    )}
+                                                    {lead.moveInDate && (
+                                                        <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-gray-700">
+                                                            🗓️ <strong>입주 시점:</strong> {lead.moveInDate}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 상담 메모 */}
+                                        {lead.notes && (
+                                            <div className="bg-amber-50/70 border border-amber-200/70 rounded-xl p-2.5 text-xs text-amber-950 whitespace-pre-wrap leading-relaxed">
+                                                <span className="font-bold block text-[10px] text-amber-800 mb-0.5">📝 상담 메모</span>
+                                                {lead.notes}
+                                            </div>
+                                        )}
+
+                                        {/* 액션 버튼 */}
+                                        <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                                            <div className="flex space-x-1.5">
+                                                {lead.customerPhone && (
+                                                    <a
+                                                        href={`tel:${lead.customerPhone}`}
+                                                        className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg transition flex items-center space-x-1 border border-blue-200"
+                                                    >
+                                                        <span>📞</span>
+                                                        <span>전화</span>
+                                                    </a>
+                                                )}
+                                                {lead.customerPhone && (
+                                                    <a
+                                                        href={`sms:${lead.customerPhone}`}
+                                                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg transition flex items-center space-x-1 border border-emerald-200"
+                                                    >
+                                                        <span>💬</span>
+                                                        <span>문자</span>
+                                                    </a>
+                                                )}
+                                                <button
+                                                    onClick={() => navigate(lead.listingId ? `/contract/${lead.listingId}` : `/contract/new`)}
+                                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition flex items-center space-x-1 border border-indigo-200"
+                                                >
+                                                    <span>📄</span>
+                                                    <span>계약서 작성</span>
+                                                </button>
+                                            </div>
+
+                                            <div className="flex space-x-1">
+                                                <button
+                                                    onClick={() => handleEditLead(lead)}
+                                                    className="p-1.5 text-gray-500 hover:text-gray-900 rounded-lg transition text-xs font-bold"
+                                                    title="수정"
+                                                >
+                                                    ✏️ 수정
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteLead(lead.id)}
+                                                    className="p-1.5 text-rose-500 hover:text-rose-700 rounded-lg transition text-xs font-bold"
+                                                    title="삭제"
+                                                >
+                                                    🗑️ 삭제
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* 고객 등록 / 수정 모달 */}
+                {showCrmModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+                        <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+                            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10">
+                                <h3 className="font-extrabold text-base text-gray-900 flex items-center space-x-1.5">
+                                    <span>📋</span>
+                                    <span>{editingLead ? '상담 고객 정보 수정' : '신규 상담 고객 등록'}</span>
+                                </h3>
+                                <button
+                                    onClick={() => setShowCrmModal(false)}
+                                    className="text-gray-400 hover:text-gray-700 text-xl font-bold w-7 h-7 flex items-center justify-center"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSaveLead} className="p-5 space-y-4 text-xs">
+                                <div>
+                                    <label className="font-bold text-gray-700 block mb-1">
+                                        고객명 <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={leadForm.customerName}
+                                        onChange={(e) => setLeadForm(prev => ({ ...prev, customerName: e.target.value }))}
+                                        placeholder="예: 김민수 고객님"
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none font-bold"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="font-bold text-gray-700 block mb-1">연락처</label>
+                                        <input
+                                            type="tel"
+                                            value={leadForm.customerPhone}
+                                            onChange={(e) => setLeadForm(prev => ({ ...prev, customerPhone: e.target.value }))}
+                                            placeholder="010-0000-0000"
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="font-bold text-gray-700 block mb-1">진행 상태</label>
+                                        <select
+                                            value={leadForm.status}
+                                            onChange={(e) => setLeadForm(prev => ({ ...prev, status: e.target.value }))}
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none font-bold"
+                                        >
+                                            <option value="inquiry">문의 접수</option>
+                                            <option value="scheduled">방문/투어 예약</option>
+                                            <option value="negotiating">계약 조율중</option>
+                                            <option value="completed">체결 완료</option>
+                                            <option value="on_hold">보류/취소</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="font-bold text-gray-700 block mb-1">관심 매물 연결</label>
+                                    <select
+                                        value={leadForm.listingId}
+                                        onChange={(e) => {
+                                            const selectedId = e.target.value;
+                                            const found = myListings.find(l => l.id === selectedId);
+                                            setLeadForm(prev => ({
+                                                ...prev,
+                                                listingId: selectedId,
+                                                listingTitle: found ? found.title : ''
+                                            }));
+                                        }}
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none"
+                                    >
+                                        <option value="">(선택 안 함 / 직접 상담)</option>
+                                        {myListings.map(item => (
+                                            <option key={item.id} value={item.id}>
+                                                [{item.transactionType || '매물'}] {item.title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="font-bold text-gray-700 block mb-1">희망 예산</label>
+                                        <input
+                                            type="text"
+                                            value={leadForm.budget}
+                                            onChange={(e) => setLeadForm(prev => ({ ...prev, budget: e.target.value }))}
+                                            placeholder="예: 보증금 1억 / 월 80"
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="font-bold text-gray-700 block mb-1">희망 입주일</label>
+                                        <input
+                                            type="text"
+                                            value={leadForm.moveInDate}
+                                            onChange={(e) => setLeadForm(prev => ({ ...prev, moveInDate: e.target.value }))}
+                                            placeholder="예: 5월 중순 / 즉시"
+                                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="font-bold text-gray-700 block mb-1">상담 상세 메모</label>
+                                    <textarea
+                                        rows={4}
+                                        value={leadForm.notes}
+                                        onChange={(e) => setLeadForm(prev => ({ ...prev, notes: e.target.value }))}
+                                        placeholder="고객 요청사항, 대출 필요 여부, 주차 여부, 가족 구성원, 선호 층수 등을 자유롭게 메모해 두세요."
+                                        className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:border-market-orange outline-none resize-none leading-relaxed"
+                                    />
+                                </div>
+
+                                <div className="pt-2 flex space-x-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCrmModal(false)}
+                                        className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                                    >
+                                        취소
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={savingLead}
+                                        className="flex-1 py-3 bg-market-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition"
+                                    >
+                                        {savingLead ? '저장 중...' : (editingLead ? '수정 완료' : '고객 등록')}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
             </MobileLayout>
         );
     }
@@ -1206,6 +1854,26 @@ const Profile = () => {
                                 </div>
                                 <span className="text-gray-300">→</span>
                             </div>
+
+                            {/* 고객 상담 장부 (간이 CRM) */}
+                            <div
+                                onClick={() => setViewMode('crm')}
+                                className="bg-gradient-to-r from-white to-orange-50/40 border border-orange-200/80 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-orange-50/60 transition animate-in fade-in"
+                            >
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-lg">📋</span>
+                                    <div>
+                                        <div className="flex items-center space-x-1.5">
+                                            <h4 className="font-bold text-sm text-gray-800">고객 상담 장부 (간이 CRM)</h4>
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 bg-market-orange text-white rounded">NEW</span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 mt-0.5">
+                                            문의 고객 관리, 상담 메모, 방문 예약 일정 {crmLeads.length > 0 && `(${crmLeads.length}명 관리중)`}
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="text-market-orange font-bold text-xs">열기 →</span>
+                            </div>
                 </div>
             </div>
 
@@ -1213,7 +1881,19 @@ const Profile = () => {
 
             {/* My Listings Section */}
             <div className="p-4 mb-20">
-                <h3 className="font-bold text-lg mb-4">내 판매중 매물 ({myListings.filter(l => l.status !== 'sold').length})</h3>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-lg text-gray-900">
+                        내 판매중 매물 ({myListings.filter(l => l.status !== 'sold').length})
+                    </h3>
+                    <div className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border flex items-center space-x-1 ${
+                        isFreeUpAvailable 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs' 
+                            : 'bg-orange-50 text-orange-700 border-orange-200'
+                    }`}>
+                        <span>🚀</span>
+                        <span>{isFreeUpAvailable ? '오늘 무료 UP (1회 가능)' : '오늘 무료 UP 완료 (추가: 500P)'}</span>
+                    </div>
+                </div>
 
                 {loading && myListings.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">로딩중...</div>
@@ -1230,11 +1910,11 @@ const Profile = () => {
                 ) : (
                     <div className="space-y-4">
                         {myListings.filter(l => l.status !== 'sold').map(item => (
-                            <div key={item.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                            <div key={item.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs hover:border-gray-300 transition">
                                 <div className="flex p-3">
                                     <div
                                         onClick={() => navigate(`/listing/${item.id}`)}
-                                        className="w-24 h-24 bg-gray-200 rounded flex-shrink-0 relative overflow-hidden cursor-pointer"
+                                        className="w-24 h-24 bg-gray-200 rounded-lg flex-shrink-0 relative overflow-hidden cursor-pointer"
                                     >
                                         <img
                                             src={item.imageUrl || "https://via.placeholder.com/150"}
@@ -1254,11 +1934,19 @@ const Profile = () => {
                                     </div>
                                     <div className="ml-3 flex-1 flex flex-col justify-between">
                                         <div onClick={() => navigate(`/listing/${item.id}`)} className="cursor-pointer">
-                                            <h4 className="font-medium text-sm line-clamp-2">{item.title}</h4>
-                                            <p className="text-xs text-gray-500 mt-1">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{item.title}</h4>
+                                            </div>
+                                            <p className="text-[11px] text-gray-500 mt-1">
                                                 {item.location} · {item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : '날짜 없음'}
                                             </p>
-                                            <div className="font-bold text-market-orange mt-1">
+                                            {item.boostedAt && (
+                                                <div className="text-[10px] text-orange-600 font-bold mt-0.5 flex items-center space-x-1">
+                                                    <span>🚀</span>
+                                                    <span>최근 UP: {new Date(item.boostedAt.seconds * 1000).toLocaleDateString()} {new Date(item.boostedAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                            )}
+                                            <div className="font-extrabold text-market-orange text-sm mt-1">
                                                 {item.transactionType === '월세'
                                                     ? `보증금 ${Number(item.deposit || 0).toLocaleString()}/월세 ${Number(item.monthlyRent || 0).toLocaleString()}`
                                                     : `${Number(item.price || 0).toLocaleString()}만원`
@@ -1270,37 +1958,47 @@ const Profile = () => {
                                 <div className="flex border-t divide-x">
                                     <button
                                         onClick={() => handleStatusChange(item.id, item.status)}
-                                        className={`flex-1 py-3 text-xs font-medium hover:bg-gray-50 border-r ${item.status === 'active' ? 'text-blue-600' : 'text-gray-500'
+                                        className={`flex-1 py-2.5 text-xs font-medium hover:bg-gray-50 border-r ${item.status === 'active' ? 'text-blue-600' : 'text-gray-500'
                                             }`}
                                     >
                                         {item.status === 'active' ? '예약중' : '판매중'}
                                     </button>
                                     <button
                                         onClick={() => handleMarkAsSold(item.id)}
-                                        className="flex-1 py-3 text-xs font-bold text-market-orange hover:bg-orange-50 border-r"
+                                        className="flex-1 py-2.5 text-xs font-bold text-market-orange hover:bg-orange-50 border-r"
                                     >
                                         거래완료
                                     </button>
                                     <button
                                         onClick={() => navigate(`/edit/${item.id}`)}
-                                        className="flex-1 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                                        className="flex-1 py-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
                                     >
                                         수정
                                     </button>
                                     <button
                                         onClick={() => handleDelete(item.id)}
-                                        className="flex-1 py-3 text-xs font-medium text-red-500 hover:bg-red-50"
+                                        className="flex-1 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50"
                                     >
                                         삭제
                                     </button>
                                 </div>
-                                <div className="border-t border-gray-100 bg-gray-50/50">
+                                <div className="border-t border-gray-100 bg-gray-50/70 grid grid-cols-2 divide-x divide-gray-100">
                                     <button
+                                        type="button"
+                                        onClick={() => handleBoostListing(item)}
+                                        disabled={boostingListingId === item.id}
+                                        className="py-2.5 text-xs font-extrabold text-market-orange hover:bg-orange-50 flex items-center justify-center space-x-1 transition"
+                                    >
+                                        <span>🚀</span>
+                                        <span>{boostingListingId === item.id ? 'UP 진행중...' : '최상단 끌어올리기 (UP)'}</span>
+                                    </button>
+                                    <button
+                                        type="button"
                                         onClick={() => navigate(`/contract/${item.id}`)}
-                                        className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
+                                        className="py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 flex items-center justify-center space-x-1 transition"
                                     >
                                         <span>📄</span>
-                                        <span>전자계약서 초안 작성하기</span>
+                                        <span>전자계약서 작성</span>
                                     </button>
                                 </div>
                             </div>

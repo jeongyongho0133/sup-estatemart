@@ -194,7 +194,10 @@ const Home = () => {
         if (a.isRecommended && !b.isRecommended) return -1;
         if (!a.isRecommended && b.isRecommended) return 1;
 
-        return 0;
+        // 3. 최신 끌어올리기 (boostedAt) 또는 등록일시 (createdAt) 기준 정렬
+        const timeA = a.boostedAt?.seconds || a.createdAt?.seconds || 0;
+        const timeB = b.boostedAt?.seconds || b.createdAt?.seconds || 0;
+        return timeB - timeA;
     });
 
     const logSearchKeyword = async (keyword) => {
