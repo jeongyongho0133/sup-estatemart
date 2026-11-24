@@ -51,6 +51,21 @@ const Profile = () => {
         notes: ''
     });
 
+    // 맞춤 매물 알림 설정 (희망 조건 구독) 관련 상태
+    const [alertSettings, setAlertSettings] = useState({
+        isActive: true,
+        location: '전체',
+        transactionType: '전체',
+        propertyType: '전체',
+        maxDeposit: '',
+        maxMonthlyRent: '',
+        maxPrice: ''
+    });
+    const [savingAlertSettings, setSavingAlertSettings] = useState(false);
+    const [matchedListings, setMatchedListings] = useState([]);
+    const [matchedLoading, setMatchedLoading] = useState(false);
+    const [showAgentQrModal, setShowAgentQrModal] = useState(false);
+
     // 매물 통계 관련 상태
     const [statsLoading, setStatsLoading] = useState(false);
     const [statsData, setStatsData] = useState([]);
@@ -80,6 +95,84 @@ const Profile = () => {
             });
         }
     }, [userData, currentUser]);
+
+    useEffect(() => {
+        if (userData?.alertSettings) {
+            setAlertSettings(prev => ({
+                ...prev,
+                ...userData.alertSettings
+            }));
+        }
+    }, [userData]);
+
+    // 맞춤 매물 알림 설정 저장 핸들러
+    const handleSaveAlertSettings = async (e) => {
+        if (e) e.preventDefault();
+        if (!currentUser) return;
+
+        setSavingAlertSettings(true);
+        try {
+            await updateDoc(doc(db, "users", currentUser.uid), {
+                alertSettings: alertSettings,
+                updatedAt: serverTimestamp()
+            });
+            alert("🔔 맞춤 매물 알림 조건이 성공적으로 저장되었습니다!\n조건에 부합하는 신규 매물 및 추천 매물이 실시간 연동됩니다.");
+        } catch (error) {
+            console.error("Error saving alert settings:", error);
+            alert("알림 설정 저장에 실패했습니다: " + error.message);
+        } finally {
+            setSavingAlertSettings(false);
+        }
+    };
+
+    // 조건에 맞는 실시간 매물 검색
+    useEffect(() => {
+        if (!currentUser || viewMode !== 'alert_settings') return;
+
+        const fetchMatches = async () => {
+            setMatchedLoading(true);
+            try {
+                const q = query(
+                    collection(db, "listings"),
+                    where("status", "==", "active")
+                );
+                const snap = await getDocs(q);
+                const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const filtered = all.filter(item => {
+                    // 1. Location
+                    if (alertSettings.location && alertSettings.location !== '전체') {
+                        if (!item.location || !item.location.includes(alertSettings.location)) return false;
+                    }
+                    // 2. Transaction Type
+                    if (alertSettings.transactionType && alertSettings.transactionType !== '전체') {
+                        if (item.transactionType !== alertSettings.transactionType) return false;
+                    }
+                    // 3. Property Type
+                    if (alertSettings.propertyType && alertSettings.propertyType !== '전체') {
+                        if (item.propertyType !== alertSettings.propertyType) return false;
+                    }
+                    // 4. Budget
+                    if (item.transactionType === '월세') {
+                        if (alertSettings.maxDeposit && Number(item.deposit || 0) > Number(alertSettings.maxDeposit)) return false;
+                        if (alertSettings.maxMonthlyRent && Number(item.monthlyRent || 0) > Number(alertSettings.maxMonthlyRent)) return false;
+                    } else {
+                        if (alertSettings.maxPrice && Number(item.price || item.deposit || 0) > Number(alertSettings.maxPrice)) return false;
+                    }
+                    return true;
+                });
+
+                filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                setMatchedListings(filtered);
+            } catch (error) {
+                console.error("Error fetching matched listings:", error);
+            } finally {
+                setMatchedLoading(false);
+            }
+        };
+
+        fetchMatches();
+    }, [currentUser, viewMode, alertSettings]);
 
     const [profileImageFile, setProfileImageFile] = useState(null);
     const [profileImagePreview, setProfileImagePreview] = useState(null);
@@ -1360,6 +1453,229 @@ const Profile = () => {
         );
     }
 
+    if (viewMode === 'alert_settings') {
+        const locations = ['전체', '서울 강남구', '서울 서초구', '서울 송파구', '서울 마포구', '서울 용산구', '경기 성남시(분당)', '경기 수원시', '인천', '부산', '대구', '대전'];
+        const transactionTypes = ['전체', '월세', '전세', '매매'];
+        const propertyTypes = ['전체', '아파트', '오피스텔', '빌라/다세대', '원룸/투룸', '상가/점포', '토지'];
+
+        return (
+            <MobileLayout>
+                <header className="sticky top-0 bg-white z-10 px-4 h-14 flex items-center justify-between border-b border-gray-100 font-bold text-lg">
+                    <button onClick={() => setViewMode('profile')} className="text-2xl mr-4">←</button>
+                    <div className="flex-1 text-center font-bold">맞춤 매물 알림 설정</div>
+                    <div className="w-8"></div>
+                </header>
+
+                <div className="p-4 pb-24 space-y-6">
+                    {/* 상단 안내 카드 */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-4 text-xs text-indigo-950 leading-relaxed shadow-xs">
+                        <span className="font-bold flex items-center space-x-1 mb-1 text-indigo-700">
+                            <span>🔔</span>
+                            <span>희망 조건 실시간 매칭 구독</span>
+                        </span>
+                        원하시는 지역, 예산, 거래유형을 설정해 두시면 조건에 부합하는 신규 매물 등록 시 알림을 보내드리고 추천해 드립니다.
+                    </div>
+
+                    {/* 설정 폼 */}
+                    <form onSubmit={handleSaveAlertSettings} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs space-y-4 text-xs">
+                        {/* 1. 알림 활성화 여부 */}
+                        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                            <div>
+                                <span className="font-bold text-gray-800 text-sm block">맞춤 매물 추천 알림 받기</span>
+                                <span className="text-[11px] text-gray-400">조건에 맞는 새 매물 등록 시 알림 수신</span>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={alertSettings.isActive !== false}
+                                    onChange={(e) => setAlertSettings(prev => ({ ...prev, isActive: e.target.checked }))}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-market-orange"></div>
+                            </label>
+                        </div>
+
+                        {/* 2. 희망 지역 */}
+                        <div>
+                            <label className="font-bold text-gray-700 block mb-1.5">📍 희망 지역</label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                                {locations.map(loc => (
+                                    <button
+                                        type="button"
+                                        key={loc}
+                                        onClick={() => setAlertSettings(prev => ({ ...prev, location: loc }))}
+                                        className={`py-2 px-2 rounded-xl text-[11px] font-bold border transition text-center truncate ${
+                                            alertSettings.location === loc
+                                                ? 'bg-market-orange text-white border-market-orange shadow-2xs'
+                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {loc}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 3. 거래 유형 */}
+                        <div>
+                            <label className="font-bold text-gray-700 block mb-1.5">🏷️ 희망 거래 유형</label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {transactionTypes.map(type => (
+                                    <button
+                                        type="button"
+                                        key={type}
+                                        onClick={() => setAlertSettings(prev => ({ ...prev, transactionType: type }))}
+                                        className={`py-2 rounded-xl text-[11px] font-bold border transition text-center ${
+                                            alertSettings.transactionType === type
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 4. 부동산 종류 */}
+                        <div>
+                            <label className="font-bold text-gray-700 block mb-1.5">🏢 희망 부동산 종류</label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {propertyTypes.map(pType => (
+                                    <button
+                                        type="button"
+                                        key={pType}
+                                        onClick={() => setAlertSettings(prev => ({ ...prev, propertyType: pType }))}
+                                        className={`py-2 rounded-xl text-[11px] font-bold border transition text-center truncate ${
+                                            alertSettings.propertyType === pType
+                                                ? 'bg-gray-900 text-white border-gray-900 shadow-2xs'
+                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {pType}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 5. 예산 한도 설정 */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                            <label className="font-bold text-gray-700 block">💰 최대 예산 범위 (선택)</label>
+                            
+                            {alertSettings.transactionType === '월세' || alertSettings.transactionType === '전체' ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <span className="text-[10px] text-gray-400 block mb-0.5">최대 보증금 (만원)</span>
+                                        <input
+                                            type="number"
+                                            value={alertSettings.maxDeposit}
+                                            onChange={(e) => setAlertSettings(prev => ({ ...prev, maxDeposit: e.target.value }))}
+                                            placeholder="예: 5000"
+                                            className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-market-orange font-bold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-gray-400 block mb-0.5">최대 월세 (만원)</span>
+                                        <input
+                                            type="number"
+                                            value={alertSettings.maxMonthlyRent}
+                                            onChange={(e) => setAlertSettings(prev => ({ ...prev, maxMonthlyRent: e.target.value }))}
+                                            placeholder="예: 100"
+                                            className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-market-orange font-bold"
+                                        />
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {alertSettings.transactionType === '전세' || alertSettings.transactionType === '매매' || alertSettings.transactionType === '전체' ? (
+                                <div>
+                                    <span className="text-[10px] text-gray-400 block mb-0.5">
+                                        최대 {alertSettings.transactionType === '전세' ? '전세보증금' : '매매가'} (만원)
+                                    </span>
+                                    <input
+                                        type="number"
+                                        value={alertSettings.maxPrice}
+                                        onChange={(e) => setAlertSettings(prev => ({ ...prev, maxPrice: e.target.value }))}
+                                        placeholder="예: 30000 (3억원)"
+                                        className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-market-orange font-bold"
+                                    />
+                                </div>
+                            ) : null}
+                        </div>
+
+                        {/* 저장 버튼 */}
+                        <button
+                            type="submit"
+                            disabled={savingAlertSettings}
+                            className="w-full py-3 bg-market-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition text-xs mt-2"
+                        >
+                            {savingAlertSettings ? '저장 중...' : '🔔 맞춤 알림 조건 저장하기'}
+                        </button>
+                    </form>
+
+                    {/* 실시간 매칭 추천 매물 피드 */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-extrabold text-sm text-gray-900 flex items-center space-x-1.5">
+                                <span>🎯</span>
+                                <span>내 조건에 맞는 실시간 매물 ({matchedListings.length}건)</span>
+                            </h3>
+                            <span className="text-[10px] text-gray-400">설정 조건 실시간 반영</span>
+                        </div>
+
+                        {matchedLoading ? (
+                            <div className="text-center py-10 text-gray-400 text-xs font-bold">조건에 맞는 매물을 검색하는 중입니다...</div>
+                        ) : matchedListings.length === 0 ? (
+                            <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 text-xs space-y-1">
+                                <span className="text-2xl block">🔍</span>
+                                <div>현재 조건에 일치하는 등록 매물이 없습니다.</div>
+                                <div className="text-[11px] text-gray-400">새로운 매물이 등록되면 알림을 보내드립니다.</div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {matchedListings.map(item => (
+                                    <div
+                                        key={item.id}
+                                        onClick={() => navigate(`/listing/${item.id}`)}
+                                        className="bg-white border border-gray-200 rounded-2xl p-3 flex shadow-2xs hover:border-market-orange cursor-pointer transition"
+                                    >
+                                        <div className="w-20 h-20 bg-gray-100 rounded-xl overflow-hidden shrink-0">
+                                            <img
+                                                src={item.imageUrl || "https://via.placeholder.com/150"}
+                                                alt={item.title}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        </div>
+                                        <div className="ml-3 flex-1 flex flex-col justify-between">
+                                            <div>
+                                                <div className="flex items-center space-x-1 mb-0.5">
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-market-orange">
+                                                        {item.transactionType}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400">
+                                                        {item.propertyType}
+                                                    </span>
+                                                </div>
+                                                <h4 className="font-bold text-xs text-gray-900 line-clamp-1">{item.title}</h4>
+                                                <p className="text-[10px] text-gray-500">{item.location}</p>
+                                            </div>
+                                            <div className="font-extrabold text-market-orange text-xs mt-1">
+                                                {item.transactionType === '월세'
+                                                    ? `보증금 ${Number(item.deposit || 0).toLocaleString()}/월세 ${Number(item.monthlyRent || 0).toLocaleString()}`
+                                                    : `${Number(item.price || 0).toLocaleString()}만원`
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </MobileLayout>
+        );
+    }
+
     if (viewMode === 'likes') {
         return (
             <MobileLayout>
@@ -1767,6 +2083,76 @@ const Profile = () => {
                     </div>
                 )}
 
+                {/* Agent Mobile Digital Card & Share Hub */}
+                {(role === 'broker' || role === 'agent') && (
+                    <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-gray-900 text-white shadow-lg space-y-4">
+                        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xl">📱</span>
+                                <div>
+                                    <h4 className="font-bold text-sm text-white">공인중개사 모바일 디지털 명함</h4>
+                                    <p className="text-[11px] text-gray-400">보유 매물과 연락처가 담긴 모바일 명함을 고객에게 공유하세요</p>
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-500 text-white">
+                                LIVE
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => navigate(`/agent/${currentUser.uid}`)}
+                                className="py-2.5 px-3 bg-white hover:bg-gray-100 text-gray-900 font-bold rounded-xl transition flex items-center justify-center space-x-1 shadow-sm"
+                            >
+                                <span>👀</span>
+                                <span>내 명함 페이지 보기</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const shareUrl = `${window.location.origin}/agent/${currentUser.uid}`;
+                                    const office = userData?.brokerInfo?.officeName || editForm.officeName || '공인중개사';
+                                    const msg = `[부동산마트 모바일 명함]\n${office} 대표 공인중개사의 실시간 보유 매물 및 연락처입니다.\n\n👉 바로보기: ${shareUrl}`;
+                                    navigator.clipboard.writeText(msg).then(() => {
+                                        alert('카카오톡 공유 문구가 복사되었습니다!\n고객과의 대화창에 붙여넣기(Ctrl+V)하세요.');
+                                    }).catch(() => {
+                                        navigator.clipboard.writeText(shareUrl);
+                                        alert('명함 링크가 복사되었습니다!');
+                                    });
+                                }}
+                                className="py-2.5 px-3 bg-yellow-400 hover:bg-yellow-300 text-gray-950 font-bold rounded-xl transition flex items-center justify-center space-x-1 shadow-sm"
+                            >
+                                <span>📲</span>
+                                <span>카톡으로 명함 전달</span>
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 text-[11px] text-gray-400">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const shareUrl = `${window.location.origin}/agent/${currentUser.uid}`;
+                                    navigator.clipboard.writeText(shareUrl).then(() => {
+                                        alert('명함 링크가 복사되었습니다!');
+                                    });
+                                }}
+                                className="hover:text-white underline"
+                            >
+                                🔗 링크 직접 복사
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowAgentQrModal(true)}
+                                className="hover:text-white underline flex items-center space-x-0.5"
+                            >
+                                <span>🏁</span>
+                                <span>QR코드 보기/다운로드</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Broker Stats */}
                 {(role === 'broker' || role === 'agent') && (
                     <div className="grid grid-cols-3 gap-2 mb-6 text-center">
@@ -1873,6 +2259,28 @@ const Profile = () => {
                                     </div>
                                 </div>
                                 <span className="text-market-orange font-bold text-xs">열기 →</span>
+                            </div>
+
+                            {/* 맞춤 매물 알림 설정 (희망 조건 구독) */}
+                            <div
+                                onClick={() => setViewMode('alert_settings')}
+                                className="bg-gradient-to-r from-white to-blue-50/40 border border-blue-200/80 rounded-xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-blue-50/60 transition animate-in fade-in"
+                            >
+                                <div className="flex items-center space-x-3">
+                                    <span className="text-lg">🔔</span>
+                                    <div>
+                                        <div className="flex items-center space-x-1.5">
+                                            <h4 className="font-bold text-sm text-gray-800">맞춤 매물 알림 설정 (희망 조건 구독)</h4>
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 bg-blue-600 text-white rounded">추천</span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 mt-0.5">
+                                            {alertSettings.location !== '전체' || alertSettings.transactionType !== '전체'
+                                                ? `현재 설정: ${alertSettings.location} · ${alertSettings.transactionType}`
+                                                : '원하는 지역, 거래유형, 가격대 맞춤 알림 및 추천 매물'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="text-blue-600 font-bold text-xs">설정 →</span>
                             </div>
                 </div>
             </div>
@@ -1982,23 +2390,32 @@ const Profile = () => {
                                         삭제
                                     </button>
                                 </div>
-                                <div className="border-t border-gray-100 bg-gray-50/70 grid grid-cols-2 divide-x divide-gray-100">
+                                <div className="border-t border-gray-100 bg-gray-50/70 grid grid-cols-3 divide-x divide-gray-100 text-[11px]">
                                     <button
                                         type="button"
                                         onClick={() => handleBoostListing(item)}
                                         disabled={boostingListingId === item.id}
-                                        className="py-2.5 text-xs font-extrabold text-market-orange hover:bg-orange-50 flex items-center justify-center space-x-1 transition"
+                                        className="py-2.5 font-extrabold text-market-orange hover:bg-orange-50 flex items-center justify-center space-x-1 transition"
                                     >
                                         <span>🚀</span>
-                                        <span>{boostingListingId === item.id ? 'UP 진행중...' : '최상단 끌어올리기 (UP)'}</span>
+                                        <span>{boostingListingId === item.id ? 'UP중...' : '끌어올리기(UP)'}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => window.open(`/listing/${item.id}/briefing`, '_blank')}
+                                        className="py-2.5 font-bold text-gray-700 hover:bg-gray-100 flex items-center justify-center space-x-1 transition"
+                                        title="A4 1장 매물 브리핑 보고서 출력 / PDF"
+                                    >
+                                        <span>🖨️</span>
+                                        <span>브리핑 리포트</span>
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => navigate(`/contract/${item.id}`)}
-                                        className="py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 flex items-center justify-center space-x-1 transition"
+                                        className="py-2.5 font-bold text-indigo-700 hover:bg-indigo-50 flex items-center justify-center space-x-1 transition"
                                     >
                                         <span>📄</span>
-                                        <span>전자계약서 작성</span>
+                                        <span>계약서</span>
                                     </button>
                                 </div>
                             </div>
@@ -2060,13 +2477,22 @@ const Profile = () => {
                                             삭제
                                         </button>
                                     </div>
-                                    <div className="border-t border-gray-200 bg-gray-50/50">
+                                    <div className="border-t border-gray-200 bg-gray-50/50 grid grid-cols-2 divide-x divide-gray-200 text-xs">
                                         <button
+                                            type="button"
+                                            onClick={() => window.open(`/listing/${item.id}/briefing`, '_blank')}
+                                            className="py-2.5 font-bold text-gray-700 hover:bg-gray-100 flex items-center justify-center space-x-1"
+                                        >
+                                            <span>🖨️</span>
+                                            <span>브리핑 리포트</span>
+                                        </button>
+                                        <button
+                                            type="button"
                                             onClick={() => navigate(`/contract/${item.id}`)}
-                                            className="w-full py-2.5 text-xs font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
+                                            className="py-2.5 font-bold text-indigo-650 hover:bg-indigo-50 flex items-center justify-center space-x-1"
                                         >
                                             <span>📄</span>
-                                            <span>전자계약서 초안 작성하기</span>
+                                            <span>계약서 관리</span>
                                         </button>
                                     </div>
                                 </div>
@@ -2108,6 +2534,48 @@ const Profile = () => {
                     회원 탈퇴하기
                 </button>
             </div>
+
+            {/* 공인중개사 모바일 명함 QR코드 모달 */}
+            {showAgentQrModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-xs text-center shadow-2xl space-y-4">
+                        <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                            <h3 className="font-extrabold text-sm text-gray-900">내 모바일 명함 QR코드</h3>
+                            <button onClick={() => setShowAgentQrModal(false)} className="text-gray-400 text-lg font-bold">✕</button>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 inline-block shadow-inner">
+                            <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/agent/${currentUser.uid}`)}`}
+                                alt="Agent QR Code"
+                                className="w-48 h-48 mx-auto"
+                            />
+                        </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                            카메라로 QR코드를 스캔하면<br />
+                            <strong>{editForm.officeName || '공인중개사'}</strong> 모바일 명함으로 연결됩니다.
+                        </p>
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(`${window.location.origin}/agent/${currentUser.uid}`)}`;
+                                    window.open(qrUrl, '_blank');
+                                }}
+                                className="w-full py-2.5 bg-market-orange hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-md transition"
+                            >
+                                QR코드 고화질 원본 다운로드
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowAgentQrModal(false)}
+                                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition"
+                            >
+                                닫기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </MobileLayout>
     );
 };

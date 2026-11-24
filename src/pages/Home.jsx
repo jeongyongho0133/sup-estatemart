@@ -317,28 +317,9 @@ const Home = () => {
                 <h1 className="text-2xl font-bold mb-4 leading-tight">
                     좋은 <span className="text-market-orange">집터</span>를 찾아보세요.
                 </h1>
-                <div className="relative">
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="지역, 아파트, 학교 검색"
-                        className="w-full px-4 py-3 pl-10 rounded-lg border border-gray-200 shadow-sm focus:border-market-orange outline-none"
-                    />
-                    <span className="absolute left-3 top-3.5 text-gray-400">🔍</span>
-                </div>
 
-                {/* Latest Notice Bar */}
-                {latestNotice && (
-                    <div
-                        onClick={() => navigate(`/notice/${latestNotice.id}`)}
-                        className="mt-4 bg-white/50 border border-orange-100 rounded-lg p-3 flex items-center space-x-3 cursor-pointer hover:bg-orange-50 transition animate-in fade-in slide-in-from-top-2 duration-500"
-                    >
-                        <span className="text-[10px] font-bold text-market-orange bg-orange-100 px-1.5 py-0.5 rounded">공지</span>
-                        <span className="text-xs text-gray-700 font-medium truncate flex-1">{latestNotice.title}</span>
-                        <span className="text-[10px] text-gray-400">더보기 &gt;</span>
-                    </div>
-                )}
+
+
             </div>
 
             {/* Category Grid */}
@@ -389,6 +370,30 @@ const Home = () => {
                         </button>
                     )}
                 </div>
+
+                {/* 추가 Search Section */}
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="지역, 아파트, 학교등, 자연어 입력 빠른검색"
+                        className="w-full px-4 py-3 pl-10 rounded-lg border border-gray-200 shadow-sm focus:border-market-orange outline-none"
+                    />
+                    <span className="absolute left-3 top-3.5 text-gray-400">🔍</span>
+                </div>
+
+                {/* Latest Notice Bar */}
+                {latestNotice && (
+                    <div
+                        onClick={() => navigate(`/notice/${latestNotice.id}`)}
+                        className="mt-4 bg-white/50 border border-orange-100 rounded-lg p-3 flex items-center space-x-3 cursor-pointer hover:bg-orange-50 transition animate-in fade-in slide-in-from-top-2 duration-500"
+                    >
+                        <span className="text-[10px] font-bold text-market-orange bg-orange-100 px-1.5 py-0.5 rounded">공지</span>
+                        <span className="text-xs text-gray-700 font-medium truncate flex-1">{latestNotice.title}</span>
+                        <span className="text-[10px] text-gray-400">더보기 &gt;</span>
+                    </div>
+                )}
             </div>
 
             {/* Sub-Category Modal for '기타' */}

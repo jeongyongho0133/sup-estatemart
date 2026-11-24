@@ -766,6 +766,17 @@ const ListingDetail = () => {
                                             <span>카카오톡 물건문의</span>
                                         </button>
                                     </div>
+
+                                    <div className="mt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => window.open(`/listing/${id}/briefing`, '_blank')}
+                                            className="w-full flex items-center justify-center space-x-2 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-bold text-xs transition shadow-2xs"
+                                        >
+                                            <span>🖨️</span>
+                                            <span>A4 매물 브리핑 보고서 출력 / PDF 다운로드</span>
+                                        </button>
+                                    </div>
                                 </>
                             );
                         })()}

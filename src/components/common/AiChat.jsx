@@ -88,7 +88,7 @@ const AiChat = () => {
             <div className="bg-market-orange p-4 flex justify-between items-center text-white">
                 <div className="flex items-center space-x-2">
                     <span className="text-xl">🤖</span>
-                    <span className="font-bold text-sm">AI 부동산 상담사</span>
+                    <span className="font-bold text-sm">AI 부동산 상담사. 답변은 부정확할 수 있고 법률적으로 모든 내용에 대하여 면책되며 반드시 법률전문가에게 직접상담바랍니다.</span>
                 </div>
                 <button onClick={() => setIsOpen(false)} className="text-white hover:bg-white/20 rounded-full p-1">
                     ✕
@@ -142,8 +142,8 @@ const AiChat = () => {
                         ➤
                     </button>
                 </div>
-                <div className="text-[12px] text-gray-400 text-center mt-2">
-                    AI 답변은 부정확할 수 있고 법률적으로 모든 내용에 대하여 면책되며,참고용 으로만 사용해주세요.
+                <div className="text-[12px] text-black-800 text-center mt-2">
+                    AI 답변은 부정확할 수 있고 법률적으로 모든 내용에 대하여 면책되며,참고용 으로만 사용해주세요. 최종 판단과 책임은 전적으로 사용자 본인에게 있습니다.
                 </div>
             </div>
         </div>
