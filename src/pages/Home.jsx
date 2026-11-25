@@ -315,7 +315,7 @@ const Home = () => {
             {/* Intro Search Section */}
             <div className="px-4 py-6 bg-gradient-to-b from-orange-50 to-white">
                 <h1 className="text-2xl font-bold mb-4 leading-tight">
-                    좋은 <span className="text-market-orange">집터</span>를 찾아보세요.
+                    좋은 <span className="text-market-orange">터를 찾을때는 </span>집터로 .
                 </h1>
 
 

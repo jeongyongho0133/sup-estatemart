@@ -40,7 +40,7 @@ const About = () => {
                     <div className='grid grid-cols-3 gap-3'>
                         <div className='bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-center transform transition hover:scale-105'>
                             <span className='text-2xl block mb-2'>{'🔍'}</span>
-                            <h4 className='text-xs font-bold text-gray-800 mb-1'>{'집을 짓는 터'}</h4>
+                            <h4 className='text-xs font-bold text-gray-800 mb-1'>{'집,건물,공장을 짓는 터'}</h4>
                             <p className='text-[9px] text-gray-400 leading-normal'>{'집을 짓는 터(대지)를 고를 때는 진입로 여부, 땅의 방향과 경사도, 그리고 기반 시설(상하수도, 전기) 연결 가능성을 가장 먼저 확인해야 합니다. 땅의 조건은 건축 비용과 직결되므로 전문가의 현장 답사가 필수적입니다'}</p>
                         </div>
                         <div className='bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-center transform transition hover:scale-105'>
@@ -122,7 +122,7 @@ const About = () => {
                         <div className='space-y-3 text-[11px] text-gray-300 leading-relaxed'>
                             <div className='flex justify-between border-b border-gray-800 pb-2'>
                                 <span className='text-gray-400'>{'회사명'}</span>
-                                <span className='font-bold'>{'(주) 집터로'}</span>
+                                <span className='font-bold'>{'(유) 집터로'}</span>
                             </div>
                             <div className='flex justify-between border-b border-gray-800 pb-2'>
                                 <span className='text-gray-400'>{'대표이사'}</span>

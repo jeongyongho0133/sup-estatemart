@@ -4,6 +4,7 @@ import MobileLayout from '../components/layout/MobileLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, where, getDocs } from 'firebase/firestore';
+import { sendInquiryNotification, sendContractSignNotification } from '../utils/kakaoNotification';
 
 const ChatRoom = () => {
     const { chatId } = useParams();
@@ -154,25 +155,73 @@ const ChatRoom = () => {
     // Send Standard Text Message
     const handleSendMessage = async (e) => {
         e.preventDefault();
-        if (!newMessage.trim() || !currentUser) return;
+        const msgText = newMessage.trim();
+        if (!msgText || !currentUser) return;
 
         try {
             await addDoc(collection(db, 'chats', chatId, 'messages'), {
-                text: newMessage,
+                text: msgText,
                 senderId: currentUser.uid,
                 createdAt: serverTimestamp()
             });
 
             await updateDoc(doc(db, 'chats', chatId), {
-                lastMessage: newMessage,
+                lastMessage: msgText,
                 lastMessageTime: serverTimestamp()
             });
+
+            // 첫 메시지 전송 시 중개사/상대방에게 매물 문의 알림톡/SMS 자동 전송
+            if (messages.length === 0 && otherUser) {
+                sendInquiryNotification({
+                    listing: {
+                        title: chatInfo?.listingTitle || '부동산 매물',
+                        imageUrl: chatInfo?.listingImage || ''
+                    },
+                    senderName: currentUser.displayName || '고객',
+                    senderPhone: currentUser.phoneNumber || '',
+                    messageText: msgText,
+                    chatId: chatId,
+                    brokerPhone: otherUser.phone || otherUser.phoneNumber || '',
+                    brokerId: otherUser.uid || ''
+                }).catch(err => console.warn('Inquiry notice failed:', err));
+            }
 
             setNewMessage('');
             setShowAttachMenu(false);
         } catch (error) {
             console.error('Error sending message:', error);
             alert('메시지 전송 실패');
+        }
+    };
+
+    // 전자계약서 서명 요청 카카오톡/SMS 발송
+    const handleSendContractSignNotice = async (msg, targetRole = 'tenant', method = 'kakao') => {
+        const dummyContract = {
+            id: msg.contractId,
+            listingTitle: msg.listingTitle,
+            contractType: msg.contractType,
+            tenant: { name: otherUser?.displayName || '고객', phone: otherUser?.phone || '' },
+            landlord: { name: currentUser?.displayName || '임대인', phone: currentUser?.phoneNumber || '' }
+        };
+
+        const res = await sendContractSignNotification({
+            contract: dummyContract,
+            targetRole,
+            targetName: otherUser?.displayName || '고객',
+            targetPhone: otherUser?.phone || '',
+            method
+        });
+
+        if (res.success) {
+            if (res.method === 'kakao') {
+                alert('카카오톡 서명 요청 공유창이 열렸습니다. 상대방을 선택해 전송해 주세요.');
+            } else if (res.method === 'sms') {
+                // SMS 앱 실행
+            } else {
+                alert('서명 링크가 클립보드에 복사되었습니다! 카카오톡 대화창에 붙여넣어 주세요.');
+            }
+        } else {
+            alert(res.message || '서명 요청 전송에 실패했습니다.');
         }
     };
 
@@ -358,17 +407,39 @@ const ChatRoom = () => {
                                         {/* Card Actions */}
                                         <div className="p-3 bg-gray-50 border-t border-gray-100 flex flex-col gap-1.5">
                                             {!isCompleted ? (
-                                                <button
-                                                    onClick={() => {
-                                                        // If message is sent by me, I might be landlord/creator, other is tenant
-                                                        const targetRole = isMyMessage ? 'landlord' : 'tenant';
-                                                        navigate(`/contract/${msg.contractId}/sign?role=${targetRole}`);
-                                                    }}
-                                                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center space-x-1 transition"
-                                                >
-                                                    <span>✍️</span>
-                                                    <span>터치 전자서명 하러가기</span>
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            // If message is sent by me, I might be landlord/creator, other is tenant
+                                                            const targetRole = isMyMessage ? 'landlord' : 'tenant';
+                                                            navigate(`/contract/${msg.contractId}/sign?role=${targetRole}`);
+                                                        }}
+                                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center space-x-1 transition"
+                                                    >
+                                                        <span>✍️</span>
+                                                        <span>터치 전자서명 하러가기</span>
+                                                    </button>
+                                                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSendContractSignNotice(msg, isMyMessage ? 'tenant' : 'landlord', 'kakao')}
+                                                            className="py-1.5 bg-yellow-400 hover:bg-yellow-500 text-amber-950 font-black text-[11px] rounded-lg transition flex items-center justify-center space-x-1 shadow-2xs"
+                                                            title="상대방에게 카카오톡으로 서명 링크 카드 발송"
+                                                        >
+                                                            <span>📲</span>
+                                                            <span>카톡 서명요청</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSendContractSignNotice(msg, isMyMessage ? 'tenant' : 'landlord', 'sms')}
+                                                            className="py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] rounded-lg transition flex items-center justify-center space-x-1"
+                                                            title="상대방에게 문자로 서명 링크 발송"
+                                                        >
+                                                            <span>💬</span>
+                                                            <span>SMS 서명요청</span>
+                                                        </button>
+                                                    </div>
+                                                </>
                                             ) : (
                                                 <button
                                                     onClick={() => navigate(`/contract/print?id=${msg.contractId}`)}

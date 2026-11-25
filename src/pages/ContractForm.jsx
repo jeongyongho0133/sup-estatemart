@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import MobileLayout from '../components/layout/MobileLayout';
 import SignaturePad from '../components/common/SignaturePad';
 import { sendContractCompletedNotification } from '../utils/contractNotification';
+import { sendContractSignNotification } from '../utils/kakaoNotification';
 
 const ContractForm = () => {
     const { listingId } = useParams();
@@ -358,7 +359,15 @@ const ContractForm = () => {
                 const docRef = await addDoc(collection(db, 'contracts'), payload);
                 setSavedContractId(docRef.id);
                 setContractStatus(payload.status);
-                alert('전자계약서가 안전하게 생성되었습니다! 상대방에게 서명 요청 링크를 공유해 주세요.');
+                
+                // 전자계약서 생성 완료 후 카카오톡/SMS 서명 요청 바로 발송 안내
+                const roleTitle = contractType === 'lease' ? '임차인' : '매수인';
+                const askSend = window.confirm(
+                    `🎉 전자계약서가 안전하게 생성되었습니다!\n\n지금 ${roleTitle}(${tenant.name || '상대방'})님에게 카카오톡으로 전자서명 요청을 바로 발송하시겠습니까?`
+                );
+                if (askSend) {
+                    await handleSendSignNotice('tenant', 'kakao', docRef.id);
+                }
             }
         } catch (err) {
             console.error('계약서 저장 에러:', err);
@@ -368,26 +377,49 @@ const ContractForm = () => {
         }
     };
 
-    const handleCopySignLink = (role) => {
-        if (!savedContractId) {
+    const handleSendSignNotice = async (role = 'tenant', method = 'kakao', explicitContractId = null) => {
+        const contractId = explicitContractId || savedContractId;
+        if (!contractId) {
             alert('먼저 아래의 [전자계약서 생성 및 서명 요청 시작] 버튼을 눌러 계약서를 생성해 주세요.');
             return;
         }
 
-        const signUrl = `${window.location.origin}/contract/${savedContractId}/sign?role=${role}`;
-        const targetName = role === 'tenant' ? (tenant.name || '고객') : (landlord.name || '고객');
         const roleTitle = role === 'tenant' ? (contractType === 'lease' ? '임차인' : '매수인') : (contractType === 'lease' ? '임대인' : '매도인');
-        const propertyName = listing?.buildingName ? `${listing.location} ${listing.buildingName}` : (listing?.title || '계약 대상 부동산');
+        const targetObj = role === 'tenant' ? tenant : landlord;
 
-        const message = `[부동산마트 전자계약]\n${targetName}님, '${propertyName}' ${roleTitle} 전자계약서 서명 요청 안내입니다.\n\n아래 보안 링크를 눌러 계약 내용을 확인하시고 터치 서명을 진행해 주세요.\n👉 서명하기: ${signUrl}`;
+        const contractData = {
+            id: contractId,
+            listingTitle: listing?.buildingName ? `${listing.location} ${listing.buildingName}` : (listing?.title || '부동산 계약서'),
+            contractType,
+            tenant,
+            landlord
+        };
 
-        navigator.clipboard.writeText(message).then(() => {
-            setCopiedTarget(role);
-            setTimeout(() => setCopiedTarget(null), 3000);
-            alert(`[${roleTitle} 서명 링크 및 카카오톡 안내 문구]가 클립보드에 복사되었습니다!\n카카오톡이나 문자로 전송해 주세요.`);
-        }).catch(() => {
-            alert('링크 복사에 실패했습니다.');
+        const res = await sendContractSignNotification({
+            contract: contractData,
+            targetRole: role,
+            targetName: targetObj.name || '고객',
+            targetPhone: targetObj.phone || '',
+            method
         });
+
+        if (res.success) {
+            if (res.method === 'kakao') {
+                alert(`[${roleTitle} 서명 요청]\n카카오톡 공유창이 열렸습니다. 대상자에게 전송을 완료해 주세요.`);
+            } else if (res.method === 'sms') {
+                // 모바일 SMS 앱으로 전환
+            } else {
+                setCopiedTarget(role);
+                setTimeout(() => setCopiedTarget(null), 3000);
+                alert(`[${roleTitle} 서명 링크]가 클립보드에 복사되었습니다!\n원하는 메신저로 전송해 주세요.`);
+            }
+        } else {
+            alert(res.message || '서명 요청 발송 중 문제가 발생했습니다.');
+        }
+    };
+
+    const handleCopySignLink = (role) => {
+        handleSendSignNotice(role, 'copy');
     };
 
     const handleSignatureSaveLocal = async (dataUrl) => {
@@ -500,23 +532,73 @@ const ContractForm = () => {
                         </div>
 
                         {/* Remote Share Actions */}
-                        <div className="pt-2 border-t border-white/10 grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                onClick={() => handleCopySignLink('tenant')}
-                                className="bg-white/10 hover:bg-white/20 active:scale-95 transition text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-1 border border-white/20"
-                            >
-                                <span>📲</span>
-                                <span>{copiedTarget === 'tenant' ? '복사 완료! ✓' : '임차인 서명 링크'}</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleCopySignLink('landlord')}
-                                className="bg-white/10 hover:bg-white/20 active:scale-95 transition text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center space-x-1 border border-white/20"
-                            >
-                                <span>📲</span>
-                                <span>{copiedTarget === 'landlord' ? '복사 완료! ✓' : '임대인 서명 링크'}</span>
-                            </button>
+                        <div className="pt-2 border-t border-white/10 space-y-2">
+                            <div className="flex items-center justify-between text-xs text-white/80 font-bold px-1">
+                                <span>📲 비대면 전자서명 요청 발송</span>
+                                <span className="text-[10px] text-amber-300">카톡 / SMS 즉시 연동</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 space-y-1.5">
+                                    <div className="text-[11px] font-bold text-white flex justify-between items-center">
+                                        <span>{contractType === 'lease' ? '임차인' : '매수인'} ({tenant.name || '미입력'})</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${tenantSig ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-300 text-amber-950'}`}>
+                                            {tenantSig ? '✓ 서명완료' : '⏳ 서명대기'}
+                                        </span>
+                                    </div>
+                                    {!tenantSig && (
+                                        <div className="grid grid-cols-2 gap-1 pt-0.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSendSignNotice('tenant', 'kakao')}
+                                                className="bg-yellow-400 hover:bg-yellow-500 text-amber-950 text-[11px] font-black py-1.5 rounded-lg flex items-center justify-center space-x-1 shadow-2xs transition"
+                                                title="카카오톡으로 서명 링크 발송"
+                                            >
+                                                <span>📲</span>
+                                                <span>카톡 발송</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSendSignNotice('tenant', 'sms')}
+                                                className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold py-1.5 rounded-lg flex items-center justify-center space-x-1 transition"
+                                                title="문자(SMS)로 서명 링크 발송"
+                                            >
+                                                <span>💬</span>
+                                                <span>문자(SMS)</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 space-y-1.5">
+                                    <div className="text-[11px] font-bold text-white flex justify-between items-center">
+                                        <span>{contractType === 'lease' ? '임대인' : '매도인'} ({landlord.name || '미입력'})</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${landlordSig ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-300 text-amber-950'}`}>
+                                            {landlordSig ? '✓ 서명완료' : '⏳ 서명대기'}
+                                        </span>
+                                    </div>
+                                    {!landlordSig && (
+                                        <div className="grid grid-cols-2 gap-1 pt-0.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSendSignNotice('landlord', 'kakao')}
+                                                className="bg-yellow-400 hover:bg-yellow-500 text-amber-950 text-[11px] font-black py-1.5 rounded-lg flex items-center justify-center space-x-1 shadow-2xs transition"
+                                                title="카카오톡으로 서명 링크 발송"
+                                            >
+                                                <span>📲</span>
+                                                <span>카톡 발송</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSendSignNotice('landlord', 'sms')}
+                                                className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold py-1.5 rounded-lg flex items-center justify-center space-x-1 transition"
+                                                title="문자(SMS)로 서명 링크 발송"
+                                            >
+                                                <span>💬</span>
+                                                <span>문자(SMS)</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -756,13 +838,29 @@ const ContractForm = () => {
                     <div className="flex items-center justify-between">
                         <h3 className="font-bold text-sm text-gray-700">{contractType === 'lease' ? '임대인' : '매도인'} 인적사항</h3>
                         {savedContractId && (
-                            <button
-                                type="button"
-                                onClick={() => handleCopySignLink('landlord')}
-                                className="text-xs text-indigo-600 font-bold hover:underline"
-                            >
-                                🔗 서명 링크 복사
-                            </button>
+                            <div className="flex items-center space-x-1.5 text-xs">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSendSignNotice('landlord', 'kakao')}
+                                    className="px-2 py-0.5 bg-yellow-400 text-amber-950 font-black rounded hover:bg-yellow-500 transition"
+                                >
+                                    📲 카톡
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleSendSignNotice('landlord', 'sms')}
+                                    className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold rounded hover:bg-emerald-100 transition"
+                                >
+                                    💬 SMS
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopySignLink('landlord')}
+                                    className="text-gray-500 font-medium hover:underline"
+                                >
+                                    🔗 복사
+                                </button>
+                            </div>
                         )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -834,13 +932,29 @@ const ContractForm = () => {
                     <div className="flex items-center justify-between">
                         <h3 className="font-bold text-sm text-gray-700">{contractType === 'lease' ? '임차인' : '매수인'} 인적사항</h3>
                         {savedContractId && (
-                            <button
-                                type="button"
-                                onClick={() => handleCopySignLink('tenant')}
-                                className="text-xs text-indigo-600 font-bold hover:underline"
-                            >
-                                🔗 서명 링크 복사
-                            </button>
+                            <div className="flex items-center space-x-1.5 text-xs">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSendSignNotice('tenant', 'kakao')}
+                                    className="px-2 py-0.5 bg-yellow-400 text-amber-950 font-black rounded hover:bg-yellow-500 transition"
+                                >
+                                    📲 카톡
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleSendSignNotice('tenant', 'sms')}
+                                    className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold rounded hover:bg-emerald-100 transition"
+                                >
+                                    💬 SMS
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopySignLink('tenant')}
+                                    className="text-gray-500 font-medium hover:underline"
+                                >
+                                    🔗 복사
+                                </button>
+                            </div>
                         )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">

@@ -5,6 +5,7 @@ import MobileLayout from '../components/layout/MobileLayout';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, setDoc, orderBy, getDoc, serverTimestamp, increment, addDoc, onSnapshot } from 'firebase/firestore';
 import AgentReviews from '../components/reviews/AgentReviews';
+import { sendContractSignNotification } from '../utils/kakaoNotification';
 
 const Profile = () => {
     const { currentUser, userData, logout, deleteUserAccount } = useAuth();
@@ -939,6 +940,32 @@ const Profile = () => {
                                     });
                                 };
 
+                                const handleSendSignNotice = async (role = 'tenant', method = 'kakao') => {
+                                    const roleTitle = role === 'tenant' ? (contract.contractType === 'lease' ? '임차인' : '매수인') : (contract.contractType === 'lease' ? '임대인' : '매도인');
+                                    const targetName = role === 'tenant' ? (contract.tenant?.name || contract.tenantName || '고객') : (contract.landlord?.name || contract.landlordName || '고객');
+                                    const targetPhone = role === 'tenant' ? (contract.tenant?.phone || contract.tenantPhone || '') : (contract.landlord?.phone || contract.landlordPhone || '');
+
+                                    const res = await sendContractSignNotification({
+                                        contract,
+                                        targetRole: role,
+                                        targetName,
+                                        targetPhone,
+                                        method
+                                    });
+
+                                    if (res.success) {
+                                        if (res.method === 'kakao') {
+                                            alert(`[${roleTitle} 서명 요청]\n카카오톡 공유창이 열렸습니다. 대상자에게 전송을 완료해 주세요.`);
+                                        } else if (res.method === 'sms') {
+                                            // 모바일 SMS 창으로 이동됨
+                                        } else {
+                                            alert(`[${roleTitle} 서명 요청 링크]가 클립보드에 복사되었습니다!\n원하는 메신저로 전달해 주세요.`);
+                                        }
+                                    } else {
+                                        alert(res.message || '서명 요청 발송 중 문제가 발생했습니다.');
+                                    }
+                                };
+
                                 return (
                                     <div key={contract.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-4">
                                         <div>
@@ -986,23 +1013,88 @@ const Profile = () => {
                                         {/* Action Buttons */}
                                         <div className="pt-2 border-t border-gray-100 space-y-2">
                                             {!isCompleted && (
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleCopyLink('tenant')}
-                                                        className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-indigo-200"
-                                                    >
-                                                        <span>📲</span>
-                                                        <span>임차인 링크 복사</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleCopyLink('landlord')}
-                                                        className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-indigo-200"
-                                                    >
-                                                        <span>📲</span>
-                                                        <span>임대인 링크 복사</span>
-                                                    </button>
+                                                <div className="space-y-2">
+                                                    {/* 임차인/매수인 서명 요청 */}
+                                                    <div className="bg-orange-50/70 p-2.5 rounded-2xl border border-orange-100">
+                                                        <div className="text-[11px] font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                                                            <span>👤 {contract.contractType === 'lease' ? '임차인' : '매수인'} ({contract.tenant?.name || contract.tenantName || '미지정'})</span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${tenantSigned ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                                {tenantSigned ? '서명완료 ✓' : '서명대기 ⏳'}
+                                                            </span>
+                                                        </div>
+                                                        {!tenantSigned && (
+                                                            <div className="grid grid-cols-3 gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSendSignNotice('tenant', 'kakao')}
+                                                                    className="py-2 bg-yellow-400 hover:bg-yellow-500 text-amber-950 text-center text-xs font-black rounded-xl transition flex items-center justify-center space-x-1 shadow-2xs"
+                                                                    title="카카오톡으로 서명 링크 카드 발송"
+                                                                >
+                                                                    <span>📲</span>
+                                                                    <span>카톡발송</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSendSignNotice('tenant', 'sms')}
+                                                                    className="py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-emerald-200"
+                                                                    title="문자(SMS)로 서명 링크 발송"
+                                                                >
+                                                                    <span>💬</span>
+                                                                    <span>문자(SMS)</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleCopyLink('tenant')}
+                                                                    className="py-2 bg-white hover:bg-gray-50 text-gray-700 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-gray-200"
+                                                                    title="서명 링크 복사"
+                                                                >
+                                                                    <span>📋</span>
+                                                                    <span>링크복사</span>
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 임대인/매도인 서명 요청 */}
+                                                    <div className="bg-blue-50/70 p-2.5 rounded-2xl border border-blue-100">
+                                                        <div className="text-[11px] font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                                                            <span>🏠 {contract.contractType === 'lease' ? '임대인' : '매도인'} ({contract.landlord?.name || contract.landlordName || '미지정'})</span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${landlordSigned ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                                {landlordSigned ? '서명완료 ✓' : '서명대기 ⏳'}
+                                                            </span>
+                                                        </div>
+                                                        {!landlordSigned && (
+                                                            <div className="grid grid-cols-3 gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSendSignNotice('landlord', 'kakao')}
+                                                                    className="py-2 bg-yellow-400 hover:bg-yellow-500 text-amber-950 text-center text-xs font-black rounded-xl transition flex items-center justify-center space-x-1 shadow-2xs"
+                                                                    title="카카오톡으로 서명 링크 카드 발송"
+                                                                >
+                                                                    <span>📲</span>
+                                                                    <span>카톡발송</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSendSignNotice('landlord', 'sms')}
+                                                                    className="py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-emerald-200"
+                                                                    title="문자(SMS)로 서명 링크 발송"
+                                                                >
+                                                                    <span>💬</span>
+                                                                    <span>문자(SMS)</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleCopyLink('landlord')}
+                                                                    className="py-2 bg-white hover:bg-gray-50 text-gray-700 text-center text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1 border border-gray-200"
+                                                                    title="서명 링크 복사"
+                                                                >
+                                                                    <span>📋</span>
+                                                                    <span>링크복사</span>
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                             <div className="flex space-x-2">
